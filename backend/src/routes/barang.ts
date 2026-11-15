@@ -13,30 +13,47 @@ const pemilik = perluRole("pemilik");
 
 const terimaFoto: RequestHandler = (req, res, next) => {
   unggahFoto(req, res, error => {
-    if (!error) return next();
-    if (error.code === "LIMIT_FILE_SIZE") return next(new KesalahanKatalog(413, "Foto maksimal 5 MiB."));
+    if (!error) {
+      return next();
+    }
+    if (error.code === "LIMIT_FILE_SIZE") {
+      return next(new KesalahanKatalog(413, "Foto maksimal 5 MiB."));
+    }
+
     next(new KesalahanKatalog(400, "Form tidak valid. Kirim satu file pada kolom foto."));
   });
 };
 
 function kolomForm(req: Request): Record<string, unknown> {
-  const fields = req.body ?? {};
-  const allowed = ["nama", "kategori_id", "harga_rupiah", "stok", "satuan"];
-  if (typeof fields !== "object" || Array.isArray(fields) || Object.keys(fields).some(k => !allowed.includes(k))) {
+  const isian = req.body ?? {};
+  if (typeof isian !== "object" || Array.isArray(isian)) {
     throw new KesalahanKatalog(400, "Kolom barang tidak dikenal.");
   }
-  return fields;
+
+  const kolomDiizinkan = ["nama", "kategori_id", "harga_rupiah", "stok", "satuan"];
+  const adaKolomAsing = Object.keys(isian).some(kolom => !kolomDiizinkan.includes(kolom));
+  if (adaKolomAsing) {
+    throw new KesalahanKatalog(400, "Kolom barang tidak dikenal.");
+  }
+
+  return isian;
 }
 
 async function cariBarang(db: MySql2Database, id: number) {
-  const [lama] = await db.select().from(barang).where(eq(barang.id, id));
-  if (!lama) throw new KesalahanKatalog(404, "Barang tidak ditemukan.");
-  return lama;
+  const [dataBarang] = await db.select().from(barang).where(eq(barang.id, id));
+  if (!dataBarang) {
+    throw new KesalahanKatalog(404, "Barang tidak ditemukan.");
+  }
+
+  return dataBarang;
 }
 
 async function bersihkanFoto(db: MySql2Database, key: string) {
-  try { await hapusJikaLepas(db, key); }
-  catch { console.warn("Pembersihan foto tertunda sampai pemulihan berikutnya."); }
+  try {
+    await hapusJikaLepas(db, key);
+  } catch {
+    console.warn("Pembersihan foto tertunda sampai pemulihan berikutnya.");
+  }
 }
 
 barangRouter.get("/", async (_req, res) => {
@@ -47,7 +64,9 @@ barangRouter.get("/", async (_req, res) => {
 barangRouter.get("/:id", async function detailBarang(req, res) {
   const idBarang = bilanganBulat(req.params.id, 1, "ID barang");
   const [detail] = await barangDenganKategori().where(eq(barang.id, idBarang));
-  if (!detail) throw new KesalahanKatalog(404, "Barang tidak ditemukan.");
+  if (!detail) {
+    throw new KesalahanKatalog(404, "Barang tidak ditemukan.");
+  }
 
   res.json({ data: sertakanUrlFoto(detail) });
 });
@@ -64,34 +83,59 @@ barangRouter.get("/:id/foto", async function kirimFotoBarang(req, res) {
 });
 
 const simpanBarang: RequestHandler = async (req, res) => {
-  const id = req.method === "PATCH" ? bilanganBulat(req.params.id, 1, "ID barang") : undefined;
-  const fields = kolomForm(req);
-  if (!id && !req.file) throw new KesalahanKatalog(400, "Foto barang wajib diunggah.");
-  if (id && !req.file && !Object.keys(fields).length) throw new KesalahanKatalog(400, "Pilih perubahan barang.");
-  const foto = req.file ? await periksaFoto(req.file) : undefined;
+  let idBarang: number | undefined;
+  if (req.method === "PATCH") {
+    idBarang = bilanganBulat(req.params.id, 1, "ID barang");
+  }
+
+  const isian = kolomForm(req);
+  if (!idBarang && !req.file) {
+    throw new KesalahanKatalog(400, "Foto barang wajib diunggah.");
+  }
+  if (idBarang && !req.file && Object.keys(isian).length === 0) {
+    throw new KesalahanKatalog(400, "Pilih perubahan barang.");
+  }
+
+  const fotoBaru = req.file ? await periksaFoto(req.file) : undefined;
   const data = await denganKunciFoto(async db => {
-    const lama = id ? await cariBarang(db, id) : undefined;
-    const nilai = validasiBarang({ ...lama, ...fields });
-    const perubahan = foto ? { ...nilai, foto_key: foto.key } : nilai;
-    let savedId = id;
+    const barangLama = idBarang ? await cariBarang(db, idBarang) : undefined;
+    const nilai = validasiBarang({ ...barangLama, ...isian });
+    let idTersimpan: number;
+
     try {
-      if (foto) await tulisFoto(foto);
-      if (id) {
-        await db.update(barang).set(perubahan).where(eq(barang.id, id));
+      if (fotoBaru) {
+        await tulisFoto(fotoBaru);
+      }
+
+      if (idBarang) {
+        const perubahan: Partial<typeof barang.$inferInsert> = { ...nilai };
+        if (fotoBaru) {
+          perubahan.foto_key = fotoBaru.key;
+        }
+        await db.update(barang).set(perubahan).where(eq(barang.id, idBarang));
+        idTersimpan = idBarang;
       } else {
-        const [hasil] = await db.insert(barang).values({ ...nilai, foto_key: foto!.key });
-        savedId = hasil.insertId;
+        // Untuk barang baru, foto sudah diwajibkan sebelum validasi.
+        const [hasil] = await db.insert(barang).values({ ...nilai, foto_key: fotoBaru!.key });
+        idTersimpan = hasil.insertId;
       }
     } catch (err) {
       // Pastikan SQL benar-benar tidak merujuk file sebelum membuang file baru.
-      if (foto) await bersihkanFoto(db, foto.key);
+      if (fotoBaru) {
+        await bersihkanFoto(db, fotoBaru.key);
+      }
       throw err;
     }
-    if (lama && foto) await bersihkanFoto(db, lama.foto_key);
-    const [hasil] = await barangDenganKategori(db).where(eq(barang.id, savedId!));
+    if (barangLama && fotoBaru) {
+      await bersihkanFoto(db, barangLama.foto_key);
+    }
+
+    const [hasil] = await barangDenganKategori(db).where(eq(barang.id, idTersimpan));
     return sertakanUrlFoto(hasil);
   });
-  res.status(id ? 200 : 201).json({ data });
+
+  const status = idBarang ? 200 : 201;
+  res.status(status).json({ data });
 };
 
 barangRouter.post("/", pemilik, terimaFoto, simpanBarang);

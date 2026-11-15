@@ -4,7 +4,10 @@ import { ambilProfil, type Role } from "./users";
 
 function jwtSecret() {
   const key = process.env.JWT_SECRET;
-  if (!key || Buffer.byteLength(key) < 32) throw new Error("Kunci JWT belum siap");
+  if (!key || Buffer.byteLength(key) < 32) {
+    throw new Error("Kunci JWT belum siap");
+  }
+
   return key;
 }
 
@@ -15,16 +18,27 @@ export function buatToken(id: number) {
 }
 
 function idPenggunaDariToken(authorization: string | undefined): number | undefined {
-  const bearer = /^Bearer ([^\s]+)$/i.exec(authorization ?? "");
-  if (!bearer) return undefined;
+  // Kata Bearer, satu spasi, lalu token tanpa spasi.
+  const polaBearer = /^Bearer ([^\s]+)$/i;
+  const bearer = polaBearer.exec(authorization ?? "");
+  if (!bearer) {
+    return undefined;
+  }
 
   const key = jwtSecret();
   try {
     const claims = jwt.verify(bearer[1], key, { algorithms: ["HS256"], issuer: "rakrapi" });
-    // Saat login, buatToken menyimpan ID pengguna di klaim sub.
-    if (typeof claims !== "string" && claims.sub && /^[1-9]\d{0,9}$/.test(claims.sub)) {
-      return Number(claims.sub);
+    if (typeof claims === "string" || !claims.sub) {
+      return undefined;
     }
+
+    // Klaim sub berisi ID pengguna: 1–10 digit, tanpa nol di depan.
+    const polaIdPengguna = /^[1-9]\d{0,9}$/;
+    if (!polaIdPengguna.test(claims.sub)) {
+      return undefined;
+    }
+
+    return Number(claims.sub);
   } catch {
     // Token tidak sah atau kedaluwarsa.
     return undefined;
