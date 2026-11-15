@@ -1,0 +1,25 @@
+Fase 3 RakRapi | Hasil uji Laragon utama
+Server: MySQL 8.0.30 di 127.0.0.1:3306, direktori data C:\laragon\data\mysql-8\
+
+Pemeriksaan sebelum menerapkan 01_skema.sql
+Jumlah database bernama rakrapi: 0
+
+Sesudah menerapkan skema
+SHOW TABLES FROM rakrapi: barang, kategori, users
+Foreign key: barang.kategori_id -> kategori.id, ON DELETE RESTRICT
+Baris sebelum demo: users = 0, kategori = 0, barang = 0
+
+02_demo.sql | Hasil INNER JOIN
+nama_barang       | nama_kategori                                            | harga_rupiah | stok   | satuan
+Minyak goreng 1 L | Minyak Goreng (uji 9a465c6f-e0d2-11f1-b2ab-60cf84d2333e) | 19000        | 12.000 | botol
+
+Percobaan menghapus kategori uji
+ERROR 1451 (23000) at line 26: Cannot delete or update a parent row: a foreign key constraint fails (`rakrapi`.`barang`, CONSTRAINT `fk_barang_kategori` FOREIGN KEY (`kategori_id`) REFERENCES `kategori` (`id`) ON DELETE RESTRICT)
+
+INNER JOIN setelah penolakan, sebelum ROLLBACK
+id_kategori | nama_kategori                                            | id_barang | nama_barang       | fk_kategori
+1           | Minyak Goreng (uji 9a465c6f-e0d2-11f1-b2ab-60cf84d2333e) | 1         | Minyak goreng 1 L | 1
+
+Setelah ROLLBACK
+sisa_kategori_uji = 0, sisa_barang_uji = 0
+Pemeriksaan dari koneksi baru ke rakrapi: users = 0, kategori = 0, barang = 0.
