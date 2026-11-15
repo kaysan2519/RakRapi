@@ -44,17 +44,23 @@ barangRouter.get("/", async (_req, res) => {
   res.json({ data: rows.map(sertakanUrlFoto) });
 });
 
-barangRouter.get("/:id", async (req, res) => {
-  const id = bilanganBulat(req.params.id, 1, "ID barang");
-  const [row] = await barangDenganKategori().where(eq(barang.id, id));
-  if (!row) throw new KesalahanKatalog(404, "Barang tidak ditemukan.");
-  res.json({ data: sertakanUrlFoto(row) });
+barangRouter.get("/:id", async function detailBarang(req, res) {
+  const idBarang = bilanganBulat(req.params.id, 1, "ID barang");
+  const [detail] = await barangDenganKategori().where(eq(barang.id, idBarang));
+  if (!detail) throw new KesalahanKatalog(404, "Barang tidak ditemukan.");
+
+  res.json({ data: sertakanUrlFoto(detail) });
 });
 
-barangRouter.get("/:id/foto", async (req, res) => {
-  const id = bilanganBulat(req.params.id, 1, "ID barang");
-  const foto = await denganKunciFoto(async db => bacaFoto((await cariBarang(db, id)).foto_key));
-  res.set({ "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" }).type(foto.mime).send(foto.bytes);
+barangRouter.get("/:id/foto", async function kirimFotoBarang(req, res) {
+  const idBarang = bilanganBulat(req.params.id, 1, "ID barang");
+  // Baca referensi dan file dalam satu kunci agar fotonya tidak berganti di tengah pembacaan.
+  const foto = await denganKunciFoto(async db => {
+    const dataBarang = await cariBarang(db, idBarang);
+    return bacaFoto(dataBarang.foto_key);
+  });
+  res.set({ "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
+  res.type(foto.mime).send(foto.bytes);
 });
 
 const simpanBarang: RequestHandler = async (req, res) => {

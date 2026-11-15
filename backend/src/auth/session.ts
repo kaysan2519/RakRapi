@@ -14,29 +14,33 @@ export function buatToken(id: number) {
   });
 }
 
-export const perluLogin: RequestHandler = async (req, res, next) => {
-  const bearer = /^Bearer ([^\s]+)$/i.exec(req.get("Authorization") ?? "");
-  if (bearer) {
-    const key = jwtSecret();
-    let id: number | undefined;
-    try {
-      const claims = jwt.verify(bearer[1], key, { algorithms: ["HS256"], issuer: "rakrapi" });
-      if (typeof claims !== "string" && claims.sub && /^[1-9]\d{0,9}$/.test(claims.sub)) {
-        id = Number(claims.sub);
-      }
-    } catch {
-      // Token salah atau kedaluwarsa mendapat respons 401 yang sama.
+function idPenggunaDariToken(authorization: string | undefined): number | undefined {
+  const bearer = /^Bearer ([^\s]+)$/i.exec(authorization ?? "");
+  if (!bearer) return undefined;
+
+  const key = jwtSecret();
+  try {
+    const claims = jwt.verify(bearer[1], key, { algorithms: ["HS256"], issuer: "rakrapi" });
+    // Saat login, buatToken menyimpan ID pengguna di klaim sub.
+    if (typeof claims !== "string" && claims.sub && /^[1-9]\d{0,9}$/.test(claims.sub)) {
+      return Number(claims.sub);
     }
-    if (id) {
-      const user = await ambilProfil(id);
-      if (user) {
-        res.locals.user = user;
-        next();
-        return;
-      }
-    }
+  } catch {
+    // Token tidak sah atau kedaluwarsa.
+    return undefined;
   }
-  res.status(401).json({ pesan: "Silakan masuk kembali." });
+}
+
+export const perluLogin: RequestHandler = async (req, res, next) => {
+  const idPengguna = idPenggunaDariToken(req.get("Authorization"));
+  const profil = idPengguna === undefined ? undefined : await ambilProfil(idPengguna);
+  if (!profil) {
+    res.status(401).json({ pesan: "Silakan masuk kembali." });
+    return;
+  }
+
+  res.locals.user = profil;
+  next();
 };
 
 export function perluRole(role: Role): RequestHandler {

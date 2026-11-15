@@ -14,6 +14,16 @@ Di terminal kedua, jalankan `curl.exe -i http://127.0.0.1:3000/api/health`.
 Status 200 berarti query melalui Drizzle mengembalikan nama database
 `rakrapi`. Jika koneksi gagal atau nama database berbeda, statusnya 503.
 
+## Cara membaca backend RakRapi
+
+Mulai dari permintaan pegawai yang sudah login: `GET /api/barang/2`.
+
+1. **Pilih route.** Di [src/index.ts](src/index.ts), `app.use("/api/barang", …, barangRouter)` meneruskan permintaan ke [src/routes/barang.ts](src/routes/barang.ts). Di sini `barangRouter.use(perluLogin)` berlaku untuk detail barang dan foto.
+2. **Ikuti sesi pegawai.** Untuk melihat asal token, buka `login` di [src/routes/auth.ts](src/routes/auth.ts). Untuk permintaan detail, baca `perluLogin` di [src/auth/session.ts](src/auth/session.ts): `idPenggunaDariToken` memeriksa Bearer JWT, lalu `ambilProfil` di [src/auth/users.ts](src/auth/users.ts) membaca pengguna dari MySQL. Jika profil ditemukan, `next()` meneruskan permintaan. Pegawai dan pemilik boleh membaca detail.
+3. **Bedakan ID pengguna dan ID barang.** Di [src/routes/barang.ts](src/routes/barang.ts), `detailBarang` menerima ID barang dari URL. Ia memvalidasi `"2"` menjadi angka `2`, lalu menambahkan kondisi `barang.id = 2` ke query `barangDenganKategori()`.
+4. **Baca kedua sisi JOIN.** Di [src/katalog/barang.ts](src/katalog/barang.ts), `barangDenganKategori` mencocokkan `barang.kategori_id` dengan `kategori.id` dan memilih `kategori.nama` sebagai `nama_kategori`. Baris hasil kembali ke `detailBarang`. Jika kosong, responsnya 404. Jika ada, `sertakanUrlFoto` menambahkan `/api/barang/2/foto` dan `res.json` mengirim hasil dalam properti `data`. Untuk mengikuti cara pemilik mengelola kategori, buka [src/routes/kategori.ts](src/routes/kategori.ts).
+5. **Ikuti permintaan foto secara terpisah.** Klien mengirim GET ke `foto_url` dengan Bearer token. Di [src/routes/barang.ts](src/routes/barang.ts), `kirimFotoBarang` mengambil `foto_key` lewat `cariBarang`. Di [src/katalog/foto.ts](src/katalog/foto.ts), `bacaFoto` membaca file privat dan mengembalikan byte serta tipe gambar. Handler mengirim byte itu dengan tipe yang sesuai.
+
 ## Autentikasi
 
 Di `.env`, `DB_USER` dan `DB_PASSWORD` memakai akun health.

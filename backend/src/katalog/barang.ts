@@ -5,10 +5,18 @@ import { barang, kategori } from "./tabel";
 import { bilanganBulat, KesalahanKatalog, namaValid } from "./validasi";
 
 export function barangDenganKategori(db: MySql2Database = catalogDb) {
-  return db.select({
-    id: barang.id, nama: barang.nama, kategori_id: kategori.id, nama_kategori: kategori.nama,
-    harga_rupiah: barang.harga_rupiah, stok: barang.stok, satuan: barang.satuan,
-  }).from(barang).innerJoin(kategori, eq(barang.kategori_id, kategori.id));
+  return db
+    .select({
+      id: barang.id,
+      nama: barang.nama,
+      kategori_id: kategori.id,
+      nama_kategori: kategori.nama,
+      harga_rupiah: barang.harga_rupiah,
+      stok: barang.stok,
+      satuan: barang.satuan,
+    })
+    .from(barang)
+    .innerJoin(kategori, eq(barang.kategori_id, kategori.id));
 }
 
 export function validasiBarang(input: Record<string, unknown>) {
