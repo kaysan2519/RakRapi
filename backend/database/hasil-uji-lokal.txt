@@ -1,0 +1,23 @@
+Ruang uji: MySQL 8.0.30, instance lokal sementara yang terpisah dari Laragon utama.
+File yang dijalankan: 01_skema.sql, lalu 02_demo.sql.
+
+Sebelum skema: jumlah database bernama rakrapi = 0 pada instance uji.
+Sesudah skema: SHOW TABLES FROM rakrapi menghasilkan barang, kategori, users.
+Aturan FK menurut MySQL: fk_barang_kategori | RESTRICT
+
+INNER JOIN sebelum percobaan hapus
+nama_barang       | nama_kategori                                            | harga_rupiah | stok   | satuan
+Minyak goreng 1 L | Minyak Goreng (uji 4badb63c-e0d1-11f1-b8a4-60cf84d2333e) | 19000        | 12.000 | botol
+
+Percobaan DELETE pada kategori uji
+ERROR 1451 (23000) at line 26: Cannot delete or update a parent row: a foreign key constraint fails (`rakrapi`.`barang`, CONSTRAINT `fk_barang_kategori` FOREIGN KEY (`kategori_id`) REFERENCES `kategori` (`id`) ON DELETE RESTRICT)
+
+INNER JOIN sesudah percobaan hapus, sebelum ROLLBACK
+id_kategori | nama_kategori                                            | id_barang | nama_barang       | fk_kategori
+1           | Minyak Goreng (uji 4badb63c-e0d1-11f1-b8a4-60cf84d2333e) | 1         | Minyak goreng 1 L | 1
+
+Sesudah ROLLBACK
+sisa_kategori_uji | sisa_barang_uji
+0                 | 0
+
+Nama kategori menggunakan UUID agar setiap demo dapat diulang dengan nama berbeda.
