@@ -1,17 +1,18 @@
 import mysql from "mysql2/promise";
 import { drizzle } from "drizzle-orm/mysql2";
 
-function connect(user: string | undefined, password: string | undefined) {
-  const pool = mysql.createPool({
+function createPool(user: string | undefined, password: string | undefined, database = process.env.DB_NAME ?? "rakrapi") {
+  return mysql.createPool({
     host: process.env.DB_HOST ?? "127.0.0.1",
     port: Number(process.env.DB_PORT ?? 3306),
     user,
     password,
-    database: process.env.DB_NAME ?? "rakrapi",
+    database,
     connectTimeout: 3000,
   });
-  return drizzle(pool);
 }
 
-export const db = connect(process.env.DB_USER, process.env.DB_PASSWORD);
-export const authDb = connect(process.env.AUTH_DB_USER, process.env.AUTH_DB_PASSWORD);
+export const db = drizzle(createPool(process.env.DB_USER, process.env.DB_PASSWORD));
+export const authDb = drizzle(createPool(process.env.AUTH_DB_USER, process.env.AUTH_DB_PASSWORD));
+export const catalogPool = createPool(process.env.CATALOG_DB_USER, process.env.CATALOG_DB_PASSWORD, process.env.CATALOG_DB_NAME);
+export const catalogDb = drizzle(catalogPool);
