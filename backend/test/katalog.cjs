@@ -108,6 +108,22 @@ test("katalog lokal melalui HTTP", async (t) => {
       await http("DELETE", item, 204, pemilik);
       await http("GET", item, 404, pemilik);
     });
+    await t.test("JOIN daftar/detail kedua role dan DELETE kategori terpakai", async () => {
+      const cat = (await http("POST", "/kategori", 201, pemilik, { nama: "Kategori uji JOIN" })).data;
+      const id = Number(admin("USE " + schema + "; INSERT INTO barang (kategori_id,nama,harga_rupiah,stok,satuan,foto_key) VALUES (" +
+        cat.id + ",'Minyak goreng 1 L',19000,12,'botol','uji-join'); SELECT LAST_INSERT_ID();"));
+      for (const token of [pegawai, pemilik]) {
+        const detail = (await http("GET", "/barang/" + id, 200, token)).data;
+        assert.equal(detail.nama_kategori, cat.nama);
+        assert.equal(detail.foto_url, "/api/barang/" + id + "/foto");
+        assert.deepEqual((await http("GET", "/barang", 200, token)).data, [detail]);
+      }
+      const conflict = await http("DELETE", "/kategori/" + cat.id, 409, pemilik);
+      assert.equal(conflict.pesan, "Kategori ini masih digunakan. Kategori bisa dihapus setelah tidak ada barang yang menggunakannya.");
+      assert.equal((await http("GET", "/barang/" + id, 200, pegawai)).data.kategori_id, cat.id);
+      admin("DELETE FROM " + schema + ".barang WHERE id=" + id + ";");
+      await http("DELETE", "/kategori/" + cat.id, 204, pemilik);
+    });
   } finally {
     await stop();
     if (dibuatAkun) admin("DROP USER '" + account + "'@'localhost';");

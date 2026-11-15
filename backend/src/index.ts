@@ -2,12 +2,14 @@ import express, { type ErrorRequestHandler } from "express";
 import { authRouter } from "./routes/auth";
 import { healthRouter } from "./routes/health";
 import { kategoriRouter } from "./routes/kategori";
+import { barangRouter } from "./routes/barang";
 import { KesalahanKatalog, kodeMysql } from "./katalog/validasi";
 
 const app = express();
 app.use("/api", healthRouter);
 app.use("/api/auth", express.json({ limit: "8kb" }), authRouter);
 app.use("/api/kategori", express.json({ limit: "8kb" }), kategoriRouter);
+app.use("/api/barang", express.json({ limit: "8kb" }), barangRouter);
 
 const tanganiError: ErrorRequestHandler = (error, _req, res, _next) => {
   if (error instanceof KesalahanKatalog) {
