@@ -3,6 +3,7 @@ import { authRouter } from "./routes/auth";
 import { healthRouter } from "./routes/health";
 import { kategoriRouter } from "./routes/kategori";
 import { barangRouter } from "./routes/barang";
+import { pulihkanFoto } from "./katalog/foto";
 import { KesalahanKatalog, kodeMysql } from "./katalog/validasi";
 
 const app = express();
@@ -38,4 +39,5 @@ app.use(tanganiError);
 const port = Number(process.env.PORT ?? 3000);
 app.listen(port, "127.0.0.1", () => {
   console.log(`RakRapi berjalan di http://127.0.0.1:${port}`);
+  void pulihkanFoto().catch(() => console.warn("Pemulihan folder foto belum berhasil."));
 });

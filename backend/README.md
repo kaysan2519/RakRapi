@@ -46,3 +46,53 @@ dan nol barang.
 Akun demo lokal: `pegawai.uji@rakrapi.test` dan `pemilik.uji@rakrapi.test`.
 Sandi demo ada di `.env.demo` pada komputer lokal. Git mengabaikan file itu
 dan `.env`.
+
+## Katalog dan foto lokal
+
+Mulai MySQL Laragon di port 3306. Gunakan `.env` yang sudah disiapkan pada
+komputer ini. Akun `rakrapi_katalog@localhost` melalui `CATALOG_DB_USER` dan
+`CATALOG_DB_PASSWORD` hanya mempunyai SELECT, INSERT, UPDATE, dan DELETE
+pada `rakrapi.kategori` dan `rakrapi.barang`.
+
+| Endpoint (awalan `/api`) | Akses | Hasil |
+|---|---|---|
+| GET /kategori, GET /kategori/:id | Pemilik | Daftar/detail kategori |
+| POST /kategori, PATCH /kategori/:id, DELETE /kategori/:id | Pemilik | Tambah, ubah nama, hapus kategori kosong |
+| GET /barang, GET /barang/:id | Pemilik, pegawai | Data barang, nama kategori hasil INNER JOIN, dan `foto_url` |
+| GET /barang/:id/foto | Pemilik, pegawai | Byte foto asli; kirim Bearer token juga ke URL ini |
+| POST /barang, PATCH /barang/:id, DELETE /barang/:id | Pemilik | Tambah, ubah, hapus barang beserta fotonya |
+
+Untuk menambah barang, kirim `multipart/form-data` dengan `nama`,
+`kategori_id`, `harga_rupiah`, `stok`, `satuan`, dan satu file pada kolom
+`foto`. Harga berupa rupiah bulat mulai dari nol. Stok botol harus bulat;
+stok kg boleh memiliki maksimal tiga desimal. Misalnya, stok `12` bersatuan
+`botol` atau `2,125` bersatuan `kg`. Untuk mengubah harga atau stok saja,
+PATCH menerima JSON, misalnya `{"harga_rupiah":20000,"stok":10}`. Untuk
+mengganti foto, gunakan PATCH multipart dengan file `foto` baru.
+
+Multer membatasi unggahan ke satu JPEG/PNG, maksimal 5 MiB. Selain MIME dan
+tanda format file, decoder gambar bawaan Windows (Windows PowerShell dan
+System.Drawing) memeriksa isi gambar serta batas 16 megapiksel. Backend
+menyimpan byte asli di `private/uploads/db-rakrapi/`; hanya `foto_key`
+tersimpan di tabel. Folder ini diabaikan Git dan hanya disajikan lewat
+endpoint yang memeriksa login.
+
+File baru ditulis sebelum referensinya disimpan di MySQL. Jika SQL gagal,
+backend memeriksa referensi sebelum membersihkan file baru. Untuk penggantian
+dan penghapusan, file lama dibersihkan setelah perubahan baris berhasil.
+Saat restart, backend memeriksa kembali file miliknya yang tidak dirujuk.
+
+### Mengulangi uji HTTP
+
+Dari folder `backend` dengan MySQL Laragon aktif:
+
+```powershell
+npm.cmd run build
+node --env-file=.env --test test/katalog.cjs
+```
+
+Uji memakai profil admin CLI MySQL `rakrapi` hanya untuk penyiapan dan
+pembersihan lingkungan uji. Nama database dan akun uji dibuat unik, foto
+masuk ke direktori sementara, sedangkan login memakai akun demo lokal.
+Uji memeriksa CRUD, hak akses, penolakan hapus kategori terpakai, data dan
+file salah, foto lama saat ubah harga/stok, serta isi foto setelah restart.

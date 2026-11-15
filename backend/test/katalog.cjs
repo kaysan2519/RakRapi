@@ -24,7 +24,8 @@ test("katalog lokal melalui HTTP", async (t) => {
   const tag = randomUUID().replaceAll("-", "").slice(0, 16);
   const schema = "rakrapi_uji_" + tag;
   const account = "uji_" + tag;
-  const folder = await fs.mkdtemp(path.join(os.tmpdir(), "rakrapi-foto-"));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "rakrapi-foto-"));
+  const folder = path.join(root, "db-" + schema);
   let dibuatDB = false, dibuatAkun = false, password, app, url;
   let pemilik, pegawai;
   async function start() {
@@ -33,7 +34,7 @@ test("katalog lokal melalui HTTP", async (t) => {
     const port = listener.address().port;
     await new Promise(resolve => listener.close(resolve));
     const env = { ...process.env, PORT: String(port), CATALOG_DB_NAME: schema,
-      CATALOG_DB_USER: account, CATALOG_DB_PASSWORD: password, UPLOAD_DIR: folder };
+      CATALOG_DB_USER: account, CATALOG_DB_PASSWORD: password, UPLOAD_DIR: root };
     delete env.DEMO_PEGAWAI_PASSWORD;
     delete env.DEMO_PEMILIK_PASSWORD;
     app = spawn(process.execPath, ["--env-file=.env", "dist/index.js"], {
@@ -124,11 +125,102 @@ test("katalog lokal melalui HTTP", async (t) => {
       admin("DELETE FROM " + schema + ".barang WHERE id=" + id + ";");
       await http("DELETE", "/kategori/" + cat.id, 204, pemilik);
     });
+    await t.test("unggah, CRUD barang, validasi, kegagalan simpan, dan restart", async () => {
+      // Dua gambar asli dibuat di RAM; tidak ada foto uji dalam repo atau katalog utama.
+      const draw = `
+        Add-Type -AssemblyName System.Drawing
+        $bitmap=[Drawing.Bitmap]::new(9,7)
+        $bitmap.SetPixel(3,3,[Drawing.Color]::Gold)
+        foreach ($format in @([Drawing.Imaging.ImageFormat]::Png,[Drawing.Imaging.ImageFormat]::Jpeg)) {
+          $stream=New-Object IO.MemoryStream
+          $bitmap.Save($stream,$format)
+          [Convert]::ToBase64String($stream.ToArray())
+          $stream.Dispose()
+        }
+        $bitmap.Dispose()`;
+      const [png, jpg] = execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", draw],
+        { windowsHide: true, encoding: "utf8" }).trim().split(/\r?\n/).map(b => Buffer.from(b, "base64"));
+      const cat = (await http("POST", "/kategori", 201, pemilik, { nama: "Minyak Goreng" })).data;
+      const jenis = { kategori_id: cat.id, nama: "Minyak goreng 1 L", harga_rupiah: 19000, stok: 12, satuan: "botol" };
+      function form(fields, bytes, mime = "image/png") {
+        const data = new FormData();
+        for (const [k, v] of Object.entries(fields)) data.set(k, String(v));
+        if (bytes) data.set("foto", new Blob([bytes], { type: mime }), "foto-dari-hp");
+        return data;
+      }
+      const fileList = async () => (await fs.readdir(folder)).sort();
+      await http("POST", "/barang", 400, pemilik, jenis);
+      await http("POST", "/barang", 415, pemilik, form(jenis, Buffer.from("bukan gambar")));
+      await http("POST", "/barang", 415, pemilik, form(jenis, png, "image/jpeg"));
+      const rusak = Buffer.concat([png.subarray(0, 8), Buffer.from("rusak"), png.subarray(-12)]);
+      await http("POST", "/barang", 415, pemilik, form(jenis, rusak));
+      await http("POST", "/barang", 413, pemilik, form(jenis, Buffer.alloc(5 * 1024 * 1024 + 1)));
+      await http("POST", "/barang", 400, pemilik, form({ ...jenis, kategori_id: 4294967295 }, png));
+      assert.deepEqual(await fileList(), []);
+      assert.deepEqual((await http("GET", "/barang", 200, pegawai)).data, []);
+      const { data } = await http("POST", "/barang", 201, pemilik, form(jenis, png));
+      const item = "/barang/" + data.id;
+      const foto = item + "/foto";
+      assert.equal(data.nama_kategori, cat.nama);
+      assert.deepEqual(await http("GET", foto, 200, pegawai), png);
+      await http("GET", foto, 401);
+      assert.equal((await http("GET", item, 200, pegawai)).data.nama, jenis.nama);
+      assert.equal((await http("GET", "/barang", 200, pegawai)).data.length, 1);
+      await http("POST", "/barang", 403, pegawai, form(jenis, png));
+      await http("PATCH", item, 403, pegawai, { stok: 99 });
+      await http("DELETE", item, 403, pegawai);
+      const filesBefore = await fileList();
+      assert.equal(filesBefore.length, 1);
+      for (const bad of [{ kategori_id: 0 }, { harga_rupiah: -1 }, { harga_rupiah: "1.2" },
+          { stok: -1 }, { stok: "1.5" }, { satuan: "liter" }, { satuan: "kg", stok: "1.1234" },
+          { foto_key: "terlarang" }, { nama: " " }]) {
+        await http("PATCH", item, 400, pemilik, bad);
+      }
+      await http("PATCH", item, 400, pemilik, form({ kategori_id: 4294967295 }, jpg, "image/jpeg"));
+      assert.deepEqual(await fileList(), filesBefore);
+      const setelah = (await http("PATCH", item, 200, pemilik, { harga_rupiah: 20000, stok: 10 })).data;
+      assert.equal(setelah.harga_rupiah, 20000);
+      assert.equal(Number(setelah.stok), 10);
+      assert.deepEqual(await fileList(), filesBefore);
+      assert.deepEqual(await http("GET", foto, 200, pegawai), png);
+      // Simulasi sisa proses terputus setelah menulis file, sebelum INSERT/COMMIT.
+      await stop();
+      await fs.writeFile(path.join(folder, randomUUID() + ".png"), png);
+      await start();
+      const fresh = await http("POST", "/auth/login", 200, null,
+        { email: "pegawai.uji@rakrapi.test", password: process.env.DEMO_PEGAWAI_PASSWORD });
+      assert.deepEqual(await http("GET", foto, 200, fresh.token), png);
+      assert.deepEqual((await http("GET", item, 200, fresh.token)).data, setelah);
+      assert.deepEqual(await fileList(), filesBefore);
+      // Gagal menulis file baru: baris dan foto lama harus tetap utuh.
+      const parked = path.join(root, "parked");
+      assert.equal(path.dirname(await fs.realpath(folder)), await fs.realpath(root));
+      await fs.rename(folder, parked);
+      try {
+        await fs.writeFile(folder, "uji folder tidak tersedia", { flag: "wx" });
+        await http("PATCH", item, 503, pemilik, form({ harga_rupiah: 7 }, jpg, "image/jpeg"));
+      } finally {
+        await fs.unlink(folder);
+        await fs.rename(parked, folder);
+      }
+      assert.deepEqual((await http("GET", item, 200, pegawai)).data, setelah);
+      assert.deepEqual(await http("GET", foto, 200, pegawai), png);
+      const kilo = (await http("PATCH", item, 200, pemilik, form({ satuan: "kg", stok: "2,125" }, jpg, "image/jpeg"))).data;
+      assert.equal(kilo.stok, "2.125");
+      assert.deepEqual(await http("GET", foto, 200, pemilik), jpg);
+      assert.equal((await fileList()).length, 1);
+      assert.notDeepEqual(await fileList(), filesBefore);
+      await http("DELETE", item, 204, pemilik);
+      await http("GET", item, 404, pegawai);
+      await http("GET", foto, 404, pegawai);
+      assert.deepEqual(await fileList(), []);
+      await http("DELETE", "/kategori/" + cat.id, 204, pemilik);
+    });
   } finally {
     await stop();
     if (dibuatAkun) admin("DROP USER '" + account + "'@'localhost';");
     if (dibuatDB) admin("DROP DATABASE " + schema + ";");
-    const actual = await fs.realpath(folder);
+    const actual = await fs.realpath(root);
     if (path.dirname(actual) === await fs.realpath(os.tmpdir()) && path.basename(actual).startsWith("rakrapi-foto-")) {
       await fs.rm(actual, { recursive: true });
     }
