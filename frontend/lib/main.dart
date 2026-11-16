@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart';
+import 'form_akun.dart';
 import 'katalog.dart';
 
 void main() => runApp(const RakRapi());
@@ -93,12 +94,31 @@ class _RakRapiState extends State<RakRapi> {
         ),
       );
     } else if (pengguna == null) {
-      layar = LayarMasuk(masuk: masuk);
-    } else {
+      layar = LayarMasuk(masuk: masuk, daftar: api.daftarWarga);
+    } else if (pengguna!['role'] == 'pemilik' ||
+        pengguna!['role'] == 'pegawai') {
       layar = DaftarBarang(
         api: api,
         pemilik: pengguna!['role'] == 'pemilik',
         keluar: keluar,
+      );
+    } else {
+      final warga = pengguna!['role'] == 'warga';
+      layar = Scaffold(
+        appBar: AppBar(
+          title: Text(warga ? 'Bansos' : 'Akun'),
+          actions: [TextButton(onPressed: keluar, child: const Text('Keluar'))],
+        ),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              warga
+                  ? 'Selamat datang, ${pengguna!['nama']}.'
+                  : 'Peran akun tidak dikenal.',
+            ),
+          ),
+        ),
       );
     }
     return MaterialApp(
@@ -117,8 +137,9 @@ class _RakRapiState extends State<RakRapi> {
 }
 
 class LayarMasuk extends StatefulWidget {
-  const LayarMasuk({super.key, required this.masuk});
+  const LayarMasuk({super.key, required this.masuk, required this.daftar});
   final Future<void> Function(String, String) masuk;
+  final Future<void> Function(String, String, String) daftar;
   @override
   State<LayarMasuk> createState() => _LayarMasukState();
 }
@@ -149,6 +170,25 @@ class _LayarMasukState extends State<LayarMasuk> {
     } finally {
       if (mounted) setState(() => sibuk = false);
     }
+  }
+
+  Future<void> daftar() async {
+    final terdaftar = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            FormAkun(judul: 'Daftar sebagai warga', simpan: widget.daftar),
+      ),
+    );
+    if (!mounted || terdaftar == null) return;
+    setState(() {
+      email.text = terdaftar;
+      sandi.clear();
+      pesan = null;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Akun warga dibuat. Silakan masuk.')),
+    );
   }
 
   @override
@@ -188,6 +228,10 @@ class _LayarMasukState extends State<LayarMasuk> {
                 FilledButton(
                   onPressed: sibuk ? null : kirim,
                   child: Text(sibuk ? 'Memeriksa…' : 'Masuk'),
+                ),
+                TextButton(
+                  onPressed: sibuk ? null : daftar,
+                  child: const Text('Daftar sebagai warga'),
                 ),
               ],
             ),

@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import { Router, type RequestHandler } from "express";
 import { buatToken, perluLogin, perluRole } from "../auth/session";
-import { cariUntukLogin, tambahPegawai } from "../auth/users";
+import { cariUntukLogin, tambahPegawai, tambahWarga } from "../auth/users";
 
 export const authRouter = Router();
 
@@ -31,30 +31,33 @@ function emailDuplikat(error: unknown): boolean {
   return error instanceof Error && emailDuplikat(error.cause);
 }
 
-export const register: RequestHandler = async (req, res) => {
-  const namaMasukan: unknown = req.body?.nama;
-  const password: unknown = req.body?.password;
-  const nama = typeof namaMasukan === "string" ? namaMasukan.trim() : "";
-  const email = emailDari(req.body?.email);
+function buatAkun(role: "warga" | "pegawai"): RequestHandler {
+  return async (req, res) => {
+    const namaMasukan: unknown = req.body?.nama;
+    const password: unknown = req.body?.password;
+    const nama = typeof namaMasukan === "string" ? namaMasukan.trim() : "";
+    const email = emailDari(req.body?.email);
 
-  const namaValid = nama.length > 0 && nama.length <= 100;
-  const sandiValid = typeof password === "string" && password.length >= 8 && Buffer.byteLength(password) <= 72;
-  if (!namaValid || !email || !sandiValid) {
-    res.status(400).json({ pesan: "Isi nama, email valid, dan sandi minimal 8 karakter, maksimal 72 byte." });
-    return;
-  }
-
-  const hash = await bcrypt.hash(password, 10);
-  try {
-    const id = await tambahPegawai(nama, email, hash);
-    res.status(201).json({ user: { id, nama, email, role: "pegawai" } });
-  } catch (err) {
-    if (!emailDuplikat(err)) {
-      throw err;
+    const namaValid = nama.length > 0 && nama.length <= 100;
+    const sandiValid = typeof password === "string" && password.length >= 8 && Buffer.byteLength(password) <= 72;
+    if (!namaValid || !email || !sandiValid) {
+      res.status(400).json({ pesan: "Isi nama, email valid, dan sandi minimal 8 karakter, maksimal 72 byte." });
+      return;
     }
-    res.status(409).json({ pesan: "Email sudah terdaftar." });
-  }
-};
+
+    const hash = await bcrypt.hash(password, 10);
+    try {
+      const simpan = role === "warga" ? tambahWarga : tambahPegawai;
+      const id = await simpan(nama, email, hash);
+      res.status(201).json({ user: { id, nama, email, role } });
+    } catch (err) {
+      if (!emailDuplikat(err)) {
+        throw err;
+      }
+      res.status(409).json({ pesan: "Email sudah terdaftar." });
+    }
+  };
+}
 
 export const login: RequestHandler = async (req, res) => {
   const email = emailDari(req.body?.email);
@@ -80,7 +83,8 @@ authRouter.use((_req, res, next) => {
   res.set("Cache-Control", "no-store");
   next();
 });
-authRouter.post("/register", register);
+authRouter.post("/register", buatAkun("warga"));
+authRouter.post("/pegawai", perluLogin, perluRole("pemilik"), buatAkun("pegawai"));
 authRouter.post("/login", login);
 authRouter.get("/me", perluLogin, (_req, res) => res.json({ user: res.locals.user }));
 authRouter.get("/pemilik", perluLogin, perluRole("pemilik"), (_req, res) => {

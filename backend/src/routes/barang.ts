@@ -8,7 +8,7 @@ import { barang } from "../katalog/tabel";
 import { bilanganBulat, KesalahanKatalog } from "../katalog/validasi";
 
 export const barangRouter = Router();
-barangRouter.use(perluLogin);
+barangRouter.use(perluLogin, perluRole("pemilik", "pegawai"));
 const pemilik = perluRole("pemilik");
 
 const terimaFoto: RequestHandler = (req, res, next) => {

@@ -18,7 +18,7 @@ Status 200 berarti query melalui Drizzle mengembalikan nama database
 
 Mulai dari permintaan pegawai yang sudah login: `GET /api/barang/2`.
 
-1. **Pilih route.** Di [src/index.ts](src/index.ts), `app.use("/api/barang", …, barangRouter)` meneruskan permintaan ke [src/routes/barang.ts](src/routes/barang.ts). Di sini `barangRouter.use(perluLogin)` berlaku untuk detail barang dan foto.
+1. **Pilih route.** Di [src/index.ts](src/index.ts), `app.use("/api/barang", …, barangRouter)` meneruskan permintaan ke [src/routes/barang.ts](src/routes/barang.ts). Router memeriksa `perluLogin` dan `perluRole("pemilik", "pegawai")` sebelum membaca daftar, detail, atau foto.
 2. **Ikuti sesi pegawai.** Untuk melihat asal token, buka `login` di [src/routes/auth.ts](src/routes/auth.ts). Untuk permintaan detail, baca `perluLogin` di [src/auth/session.ts](src/auth/session.ts): `idPenggunaDariToken` memeriksa Bearer JWT, lalu `ambilProfil` di [src/auth/users.ts](src/auth/users.ts) membaca pengguna dari MySQL. Jika profil ditemukan, `next()` meneruskan permintaan. Pegawai dan pemilik boleh membaca detail.
 3. **Bedakan ID pengguna dan ID barang.** Di [src/routes/barang.ts](src/routes/barang.ts), `detailBarang` menerima ID barang dari URL. Ia memvalidasi `"2"` menjadi angka `2`, lalu menambahkan kondisi `barang.id = 2` ke query `barangDenganKategori()`.
 4. **Baca kedua sisi JOIN.** Di [src/katalog/barang.ts](src/katalog/barang.ts), `barangDenganKategori` mencocokkan `barang.kategori_id` dengan `kategori.id` dan memilih `kategori.nama` sebagai `nama_kategori`. Baris hasil kembali ke `detailBarang`. Jika kosong, responsnya 404. Jika ada, `sertakanUrlFoto` menambahkan `/api/barang/2/foto` dan `res.json` mengirim hasil dalam properti `data`. Untuk mengikuti cara pemilik mengelola kategori, buka [src/routes/kategori.ts](src/routes/kategori.ts).
@@ -34,17 +34,17 @@ minimal 32 byte. Saat demo, kirim permintaan ke `http://127.0.0.1:3000`.
 
 | Endpoint | Cara menggunakan |
 |---|---|
-| `POST /api/auth/register` | Kirim JSON berisi `nama`, `email`, `password`. Pendaftaran publik selalu menghasilkan pegawai. |
+| `POST /api/auth/register` | Publik. Kirim `nama`, `email`, dan `password`. Server selalu membuat warga. |
+| `POST /api/auth/pegawai` | Khusus pemilik dengan Bearer token. Kirim isian yang sama untuk membuat pegawai. |
 | `POST /api/auth/login` | Kirim `email` dan `password`. Respons sukses berisi profil dan JWT yang berlaku satu jam. |
 | `GET /api/auth/me` | Kirim header `Authorization: Bearer <token>` untuk membaca profil sendiri. |
 | `GET /api/auth/pemilik` | Gunakan header yang sama untuk memeriksa akses khusus pemilik. |
 
-**Menyiapkan pemilik uji.** Daftarkan akun melalui endpoint register.
-Catat ID dari respons 201. Admin lokal memeriksa ID dan email akun yang baru
-dibuat, lalu mengubah role hanya untuk baris itu. Login sebagai akun tersebut
-dan uji kembali endpoint pemilik. Aplikasi tidak mempunyai izin UPDATE.
+**Pemilik uji.** Gunakan akun pemilik yang sudah tersedia di Laragon untuk
+menguji menu Tambah pegawai. Login pemilik memakai endpoint yang sama dengan
+login pegawai dan warga.
 
-**Hasil uji Laragon Fase 4B.** Register dengan tambahan `role: "pemilik"`
+**Arsip uji Fase 4B sebelum migration warga.** Register dengan tambahan `role: "pemilik"`
 menghasilkan 201 dan role tersimpan `pegawai`. Email duplikat menghasilkan
 409. Sandi salah menghasilkan 401; sandi benar menghasilkan 200 untuk kedua
 role. Profil dengan token valid menghasilkan 200 untuk keduanya; tanpa token
@@ -52,6 +52,10 @@ atau dengan token tidak valid menghasilkan 401. Endpoint pemilik menghasilkan
 403 untuk pegawai dan 200 untuk pemilik. Health menghasilkan 200 dengan
 `nama_database` bernilai `rakrapi`. Sesudah uji, ada dua akun, nol kategori,
 dan nol barang.
+
+**Migration tiga peran.** Setelah skema awal, jalankan `database/03_role_warga.sql` dan `database/04_prosedur_pegawai.sql` pada database yang dipilih. Migration mengubah default dan pemeriksaan role untuk pendaftaran berikutnya. Untuk endpoint pegawai, isi `PEGAWAI_DB_USER` dan `PEGAWAI_DB_PASSWORD` dari akun localhost terpisah. Satu-satunya grant aplikasi untuk akun itu adalah `GRANT EXECUTE ON PROCEDURE rakrapi.tambah_pegawai TO 'rakrapi_pegawai'@'localhost'`. Prosedur menerima nama, email, dan hash lalu mengisi role pegawai sendiri.
+
+Dari folder backend, jalankan `npm.cmd run build`, lalu `node --env-file=.env test/akun.cjs` untuk uji HTTP terisolasi. Tambahkan `emulator-5554` di akhir perintah untuk menguji formulir serta pemulihan sesi ketiga peran melalui Flutter. Runner menggunakan profil admin lokal MySQL `rakrapi` untuk membuat dan membersihkan database uji.
 
 Akun demo lokal: `pegawai.uji@rakrapi.test` dan `pemilik.uji@rakrapi.test`.
 Sandi demo ada di `.env.demo` pada komputer lokal. Git mengabaikan file itu

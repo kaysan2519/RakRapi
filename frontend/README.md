@@ -31,6 +31,10 @@ $tujuan = "/sdcard/Pictures/RakRapi/$([guid]::NewGuid())$($foto.Extension)"
 
 Alur kode dimulai di `lib/main.dart` untuk masuk dan memulihkan sesi. Buka `lib/katalog.dart` untuk daftar, detail dan foto privat, `lib/form_barang.dart` untuk isian dan pratinjau, serta `lib/api.dart` untuk permintaan HTTP dan pengiriman foto. Token sesi disimpan lewat SharedPreferences dan dihapus saat keluar.
 
+### Mencoba tiga peran
+
+Gunakan **Daftar sebagai warga** pada layar Masuk untuk membuat akun pribadi. Masuk dengan akun itu untuk membuka halaman **Bansos**. Untuk membuat akun pegawai, masuk sebagai pemilik dan buka **Menu pemilik (⋮) → Tambah pegawai** pada daftar barang. Pilih **Keluar** untuk berganti akun. Pegawai dapat membuka katalog dan foto, sedangkan pemilik juga dapat mengelola barang. Saat aplikasi dibuka kembali, sesi yang masih berlaku membuka halaman sesuai peran dari API.
+
 ### Uji pengembang
 
 `flutter test` menjalankan tes formulir tanpa MySQL. Untuk tes perangkat, siapkan API kedua pada port terpisah dengan database katalog dan direktori unggahan sementara. Database itu harus memiliki nol barang dan tepat satu kategori penanda bernama `QA-` diikuti 16 digit heksadesimal unik. Login memakai dua akun demo lokal. Galeri emulator perlu satu foto uji.

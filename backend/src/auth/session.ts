@@ -57,9 +57,9 @@ export const perluLogin: RequestHandler = async (req, res, next) => {
   next();
 };
 
-export function perluRole(role: Role): RequestHandler {
+export function perluRole(...diizinkan: Role[]): RequestHandler {
   return (_req, res, next) => {
-    if (res.locals.user?.role !== role) {
+    if (!diizinkan.includes(res.locals.user?.role)) {
       res.status(403).json({ pesan: "Akses ditolak." });
       return;
     }

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'api.dart';
 import 'form_barang.dart';
+import 'form_akun.dart';
 
 class PesanGagal extends StatelessWidget {
   const PesanGagal(this.pesan, {super.key, this.ulangi});
@@ -82,11 +83,37 @@ class _DaftarBarangState extends State<DaftarBarang> {
     }
   }
 
+  Future<void> tambahPegawai() async {
+    final email = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            FormAkun(judul: 'Tambah pegawai', simpan: widget.api.tambahPegawai),
+      ),
+    );
+    if (mounted && email != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Akun pegawai $email dibuat.')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
       title: const Text('Daftar barang'),
       actions: [
+        if (widget.pemilik)
+          PopupMenuButton<String>(
+            tooltip: 'Menu pemilik',
+            onSelected: (_) => tambahPegawai(),
+            itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'pegawai',
+                child: Text('Tambah pegawai'),
+              ),
+            ],
+          ),
         TextButton(onPressed: widget.keluar, child: const Text('Keluar')),
       ],
     ),

@@ -98,6 +98,24 @@ class RakRapiApi {
 
   Future<Json> profil() async =>
       (await _json('GET', '/auth/me'))['user'] as Json;
+
+  Future<void> daftarWarga(String nama, String email, String sandi) async {
+    await _json(
+      'POST',
+      '/auth/register',
+      privat: false,
+      isi: {'nama': nama, 'email': email, 'password': sandi},
+    );
+  }
+
+  Future<void> tambahPegawai(String nama, String email, String sandi) async {
+    await _json(
+      'POST',
+      '/auth/pegawai',
+      isi: {'nama': nama, 'email': email, 'password': sandi},
+    );
+  }
+
   Future<List<Json>> daftarBarang() async =>
       ((await _json('GET', '/barang'))['data'] as List).cast<Json>();
   Future<Json> detail(int id) async =>
