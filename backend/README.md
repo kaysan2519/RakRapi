@@ -16,13 +16,17 @@ Status 200 berarti query melalui Drizzle mengembalikan nama database
 
 ## Cara membaca backend RakRapi
 
-Mulai dari permintaan pegawai yang sudah login: `GET /api/barang/2`.
+Ikuti permintaan pegawai yang sudah masuk dan membuka `GET /api/barang/2`. Tiga file pertama menunjukkan alur utamanya.
 
-1. **Pilih route.** Di [src/index.ts](src/index.ts), `app.use("/api/barang", …, barangRouter)` meneruskan permintaan ke [src/routes/barang.ts](src/routes/barang.ts). Router memeriksa `perluLogin` dan `perluRole("pemilik", "pegawai")` sebelum membaca daftar, detail, atau foto.
-2. **Ikuti sesi pegawai.** Untuk melihat asal token, buka `login` di [src/routes/auth.ts](src/routes/auth.ts). Untuk permintaan detail, baca `perluLogin` di [src/auth/session.ts](src/auth/session.ts): `idPenggunaDariToken` memeriksa Bearer JWT, lalu `ambilProfil` di [src/auth/users.ts](src/auth/users.ts) membaca pengguna dari MySQL. Jika profil ditemukan, `next()` meneruskan permintaan. Pegawai dan pemilik boleh membaca detail.
-3. **Bedakan ID pengguna dan ID barang.** Di [src/routes/barang.ts](src/routes/barang.ts), `detailBarang` menerima ID barang dari URL. Ia memvalidasi `"2"` menjadi angka `2`, lalu menambahkan kondisi `barang.id = 2` ke query `barangDenganKategori()`.
-4. **Baca kedua sisi JOIN.** Di [src/katalog/barang.ts](src/katalog/barang.ts), `barangDenganKategori` mencocokkan `barang.kategori_id` dengan `kategori.id` dan memilih `kategori.nama` sebagai `nama_kategori`. Baris hasil kembali ke `detailBarang`. Jika kosong, responsnya 404. Jika ada, `sertakanUrlFoto` menambahkan `/api/barang/2/foto` dan `res.json` mengirim hasil dalam properti `data`. Untuk mengikuti cara pemilik mengelola kategori, buka [src/routes/kategori.ts](src/routes/kategori.ts).
-5. **Ikuti permintaan foto secara terpisah.** Klien mengirim GET ke `foto_url` dengan Bearer token. Di [src/routes/barang.ts](src/routes/barang.ts), `kirimFotoBarang` mengambil `foto_key` lewat `cariBarang`. Di [src/katalog/foto.ts](src/katalog/foto.ts), `bacaFoto` membaca file privat dan mengembalikan byte serta tipe gambar. Handler mengirim byte itu dengan tipe yang sesuai.
+1. [barang.routes.ts](src/routes/barang.routes.ts) memasangkan `GET /:id` dengan `detailBarang`. Awalan `/api/barang` terdaftar di [app.ts](src/app.ts). Sebelum controller dipanggil, `perluLogin` memeriksa JWT dan memuat profil. Lalu `perluRole("pemilik", "pegawai")` memeriksa hak baca. Kedua pemeriksaan ada di [akses.middleware.ts](src/middleware/akses.middleware.ts).
+2. [barang.controller.ts](src/controllers/barang.controller.ts) berisi `detailBarang`. Fungsi ini membaca `"2"` dari URL. `bilanganBulat` memvalidasinya menjadi angka `2`. Controller meneruskan angka itu ke `ambilDetailBarang`, lalu mengirim hasilnya sebagai JSON `{ data }`.
+3. [barang.service.ts](src/services/barang.service.ts) berisi `ambilDetailBarang`. Fungsi ini memakai query `barangDenganKategori` dan memilih baris dengan `barang.id = 2`. `innerJoin` mencocokkan `barang.kategori_id` dengan `kategori.id`, sehingga `kategori.nama` bisa dikirim sebagai `nama_kategori`. Jika baris kosong, hasilnya 404. Untuk barang yang ditemukan, `sertakanUrlFoto` menambahkan `/api/barang/2/foto`.
+
+**Foto.** Flutter meminta `foto_url` dengan token yang sama. Dari route `GET /:id/foto`, ikuti `kirimFotoBarang` di controller barang, lalu `ambilFotoBarang` di service barang. Service membaca `foto_key`, kemudian `bacaFoto` di [foto.service.ts](src/services/foto.service.ts) membuka file privat. Controller mengirim isi file dengan tipe gambarnya.
+
+**Login.** Mulai dari [akun.routes.ts](src/routes/akun.routes.ts), buka `login` di [akun.controller.ts](src/controllers/akun.controller.ts), lalu `periksaLogin` di [akun.service.ts](src/services/akun.service.ts) untuk melihat pemeriksaan sandi dan pembuatan JWT.
+
+**Kategori.** Mulai dari [kategori.routes.ts](src/routes/kategori.routes.ts) untuk melihat akses pemilik. Ikuti fungsi pada baris route ke [kategori.controller.ts](src/controllers/kategori.controller.ts), lalu lihat query di [kategori.service.ts](src/services/kategori.service.ts). Definisi tabel barang, kategori, dan pengguna ada di [schema.ts](src/config/schema.ts).
 
 ## Autentikasi
 

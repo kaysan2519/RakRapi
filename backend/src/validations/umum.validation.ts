@@ -1,8 +1,4 @@
-export class KesalahanKatalog extends Error {
-  constructor(readonly status: number, pesan: string) {
-    super(pesan);
-  }
-}
+import { KesalahanKatalog } from "../middleware/error.middleware";
 
 export function bilanganBulat(value: unknown, min: number, label: string): number {
   if (typeof value !== "string" && typeof value !== "number") {
@@ -27,15 +23,4 @@ export function namaValid(value: unknown, max: number) {
     throw new KesalahanKatalog(400, `Nama wajib diisi, maksimal ${max} karakter.`);
   }
   return nama;
-}
-
-export function kodeMysql(error: unknown): string | undefined {
-  if (!(error instanceof Error)) {
-    return undefined;
-  }
-  if ("code" in error && typeof error.code === "string") {
-    return error.code;
-  }
-
-  return kodeMysql(error.cause);
 }

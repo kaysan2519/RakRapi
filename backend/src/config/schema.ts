@@ -1,5 +1,16 @@
 import { decimal, int, mysqlTable, varchar } from "drizzle-orm/mysql-core";
 
+// Pemetaan untuk query ke tabel Laragon yang sudah ada.
+export const users = mysqlTable("users", {
+  id: int("id", { unsigned: true }).primaryKey().autoincrement(),
+  nama: varchar("nama", { length: 100 }).notNull(),
+  email: varchar("email", { length: 255 }).notNull(),
+  passwordHash: varchar("password_hash", { length: 255 }).notNull(),
+  role: varchar("role", { length: 10, enum: ["pemilik", "pegawai", "warga"] }).notNull(),
+});
+
+export type Role = typeof users.$inferSelect.role;
+
 export const kategori = mysqlTable("kategori", {
   id: int("id", { unsigned: true }).primaryKey().autoincrement(),
   nama: varchar("nama", { length: 100 }).notNull(),

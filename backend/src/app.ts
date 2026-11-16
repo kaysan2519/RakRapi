@@ -1,0 +1,14 @@
+import express from "express";
+import { tanganiError } from "./middleware/error.middleware";
+import { akunRouter } from "./routes/akun.routes";
+import { barangRouter } from "./routes/barang.routes";
+import { healthRouter } from "./routes/health.routes";
+import { kategoriRouter } from "./routes/kategori.routes";
+
+export const app = express();
+app.use("/api", healthRouter);
+app.use("/api/auth", express.json({ limit: "8kb" }), akunRouter);
+app.use("/api/kategori", express.json({ limit: "8kb" }), kategoriRouter);
+app.use("/api/barang", express.json({ limit: "8kb" }), barangRouter);
+
+app.use(tanganiError);

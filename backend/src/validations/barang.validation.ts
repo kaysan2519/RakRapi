@@ -1,22 +1,19 @@
-import { eq } from "drizzle-orm";
-import type { MySql2Database } from "drizzle-orm/mysql2";
-import { catalogDb } from "../config/db";
-import { barang, kategori } from "./tabel";
-import { bilanganBulat, KesalahanKatalog, namaValid } from "./validasi";
+import { KesalahanKatalog } from "../middleware/error.middleware";
+import { bilanganBulat, namaValid } from "./umum.validation";
 
-export function barangDenganKategori(db: MySql2Database = catalogDb) {
-  return db
-    .select({
-      id: barang.id,
-      nama: barang.nama,
-      kategori_id: kategori.id,
-      nama_kategori: kategori.nama,
-      harga_rupiah: barang.harga_rupiah,
-      stok: barang.stok,
-      satuan: barang.satuan,
-    })
-    .from(barang)
-    .innerJoin(kategori, eq(barang.kategori_id, kategori.id));
+export function kolomForm(body: unknown): Record<string, unknown> {
+  const isian = body ?? {};
+  if (typeof isian !== "object" || Array.isArray(isian)) {
+    throw new KesalahanKatalog(400, "Kolom barang tidak dikenal.");
+  }
+
+  const kolomDiizinkan = ["nama", "kategori_id", "harga_rupiah", "stok", "satuan"];
+  const adaKolomAsing = Object.keys(isian).some(kolom => !kolomDiizinkan.includes(kolom));
+  if (adaKolomAsing) {
+    throw new KesalahanKatalog(400, "Kolom barang tidak dikenal.");
+  }
+
+  return isian as Record<string, unknown>;
 }
 
 export function validasiBarang(input: Record<string, unknown>) {
@@ -51,8 +48,4 @@ export function validasiBarang(input: Record<string, unknown>) {
   }
 
   return { nama, kategori_id, harga_rupiah, satuan, stok };
-}
-
-export function sertakanUrlFoto<T extends { id: number }>(data: T) {
-  return { ...data, foto_url: `/api/barang/${data.id}/foto` };
 }
