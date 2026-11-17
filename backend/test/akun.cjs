@@ -8,6 +8,7 @@ const { once } = require('node:events');
 const { randomBytes } = require('node:crypto');
 const { execFileSync, spawn } = require('node:child_process');
 const { setTimeout: tunggu } = require('node:timers/promises');
+const readline = require('node:readline');
 const bcrypt = require('bcryptjs');
 
 const cli = process.env.MYSQL_CLI || 'C:/laragon/bin/mysql/mysql-8.0.30-winx64/bin/mysql.exe';
@@ -87,7 +88,9 @@ async function main() {
     const sandiStaf = akunMysql(staf);
     const sandiKatalog = akunMysql(katalog);
     admin("GRANT SELECT (id,nama,email,password_hash,role), INSERT (nama,email,password_hash) ON " + db + ".users TO '" + publik + "'@'localhost';");
-    for (const tabel of ['kategori','barang']) admin("GRANT SELECT ON " + db + "." + tabel + " TO '" + katalog + "'@'localhost';");
+    const demoManual = process.argv[2] === '--demo';
+    const izinKatalog = demoManual ? 'SELECT, INSERT, UPDATE, DELETE' : 'SELECT';
+    for (const tabel of ['kategori','barang']) admin("GRANT " + izinKatalog + " ON " + db + "." + tabel + " TO '" + katalog + "'@'localhost';");
     admin("GRANT EXECUTE ON PROCEDURE " + db + ".tambah_pegawai TO '" + staf + "'@'localhost';");
     const listener = net.createServer().listen(0, '127.0.0.1');
     await once(listener, 'listening');
@@ -133,7 +136,29 @@ async function main() {
     const hashBaru = admin("SELECT password_hash FROM users WHERE email='warga@rakrapi.test'", db);
     assert.ok(await bcrypt.compare(password, hashBaru));
     console.log('Lulus: migration menjaga akun lama; register 201 warga; duplikat 409; katalog warga 403; tambah pegawai 401/403/201; login dan hash benar.');
-    if (process.argv[2]) await ujiAndroid(process.argv[2],port,password);
+    if (demoManual) {
+      const panduan = path.join(folder, 'akun-demo.txt');
+      fs.writeFileSync(panduan, [
+        'Akun sementara, hanya untuk API demo pada port ' + port,
+        'Pemilik: ' + emailPemilik, 'Pegawai: baru@rakrapi.test', 'Warga: warga@rakrapi.test',
+        'Sandi untuk ketiga akun: ' + password,
+      ].join(os.EOL), { mode: 0o600, flag: 'wx' });
+      console.log('Email dan sandi ada di file lokal ' + panduan);
+      console.log('Di terminal frontend, jalankan:');
+      console.log('& "$env:LOCALAPPDATA/Android/Sdk/platform-tools/adb.exe" -s emulator-5554 reverse tcp:' + port + ' tcp:' + port);
+      console.log('flutter.bat run -d emulator-5554 --no-pub --dart-define=API_URL=http://127.0.0.1:' + port + '/api');
+      console.log('Tekan Enter di terminal ini sesudah demo untuk membersihkan data sementara.');
+      const input = readline.createInterface({input:process.stdin,output:process.stdout});
+      const berhenti = () => input.close();
+      const tutup = once(input, 'close');
+      input.once('line', berhenti);
+      input.once('SIGINT', berhenti);
+      process.once('SIGTERM', berhenti);
+      await tutup;
+      process.off('SIGTERM', berhenti);
+    } else if (process.argv[2]) {
+      await ujiAndroid(process.argv[2],port,password);
+    }
   } finally {
     if (server && server.exitCode === null && server.signalCode === null) {
       const berhenti=once(server,'exit'); server.kill(); await berhenti;
