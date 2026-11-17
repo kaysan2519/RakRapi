@@ -76,7 +76,7 @@ void main() {
       expect(find.text('12 botol'), findsOneWidget);
       expect(find.text('Minyak Goreng'), findsOneWidget);
       expect(find.text('Hapus barang'), findsNothing);
-      expect(find.text('Ubah barang'), findsNothing);
+      expect(find.text('Ubah barang'), findsOneWidget);
       if (const bool.fromEnvironment('BUKTI_SRS')) {
         await binding.convertFlutterSurfaceToImage();
         await tester.pumpAndSettle();
@@ -89,7 +89,7 @@ void main() {
         'UI pegawai: detail ID 2, harga, stok dan foto privat tampil.',
       );
       await kembali();
-      expect(find.text('Tambah barang'), findsNothing);
+      expect(find.text('Tambah barang'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
       await tester.pumpWidget(RakRapi(api: RakRapiApi(alamat: utama.alamat)));
       await tunggu(find.text('Minyak goreng 1 L'));
@@ -187,7 +187,7 @@ void main() {
       await tunggu(find.bySemanticsLabel('Foto barang'));
       expect(find.text('Rp25.500'), findsOneWidget);
       expect(find.text('Kategori baru UI'), findsOneWidget);
-      expect(find.text('Ubah barang'), findsNothing);
+      expect(find.text('Ubah barang'), findsOneWidget);
       debugPrint('UI pegawai: barang dan foto baru dari API uji terbuka.');
     },
     timeout: const Timeout(Duration(minutes: 9)),

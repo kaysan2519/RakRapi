@@ -145,6 +145,17 @@ class RakRapiApi {
     await _json('DELETE', '/barang/$id');
   }
 
+  Future<List<Json>> lowongan() async =>
+      ((await _json('GET', '/lowongan'))['data'] as List).cast<Json>();
+
+  Future<void> bukaLowongan(String judul) async {
+    await _json('POST', '/lowongan', isi: {'judul': judul});
+  }
+
+  Future<void> tutupLowongan(int id) async {
+    await _json('PATCH', '/lowongan/$id/tutup');
+  }
+
   Future<int> simpanBarang(
     Map<String, String> isian, {
     int? id,

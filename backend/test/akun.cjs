@@ -35,22 +35,39 @@ async function ujiAndroid(device, port, password) {
   assert.match(device, /^emulator-\d+$/);
   const adb = path.join(process.env.LOCALAPPDATA, 'Android/Sdk/platform-tools/adb.exe');
   const target = 'files/rakrapi-uji-akun-' + tag;
+  // Salinan APK uji menggunakan paket tersendiri agar sesi di aplikasi utama tetap tersimpan.
+  const frontend = process.env.RAKRAPI_FRONTEND_UJI || path.resolve('../frontend');
+  const paket = process.env.RAKRAPI_FRONTEND_UJI ? 'com.example.rakrapi.qa' : 'com.example.rakrapi';
+  const bukti = process.env.RAKRAPI_BUKTI === '1';
   const run = (args, input) => execFileSync(adb, ['-s', device, ...args], { input, encoding: 'utf8', windowsHide: true });
   run(['reverse', 'tcp:' + port, 'tcp:' + port]);
   const flutter = spawn('cmd.exe', ['/d', '/c', 'flutter.bat', 'test', 'integration_test/akun_test.dart',
     '-d', device, '--no-pub', '--reporter', 'expanded', '--dart-define=KODE_UJI=' + tag], {
-    cwd: path.resolve('../frontend'), windowsHide: true, stdio: 'inherit',
+    cwd: frontend, windowsHide: true, stdio: 'inherit',
   });
   const selesai = once(flutter, 'exit');
   try {
     for (let i = 0; i < 600 && flutter.exitCode === null; i++) {
-      if (run(['shell', 'if run-as com.example.rakrapi test -f ' + target + '.siap 2>/dev/null; then echo siap; fi']).trim() === 'siap') {
+      if (run(['shell', 'if run-as ' + paket + ' test -f ' + target + '.siap 2>/dev/null; then echo siap; fi']).trim() === 'siap') {
         // Hanya APK debug uji dapat membaca file privat ini.
-        run(['shell', "run-as com.example.rakrapi sh -c 'cat > " + target + ".tmp && mv " + target + ".tmp " + target + "'"],
-          JSON.stringify({ port, emailPemilik, password, sandiBaru: sandi() }));
+        run(['shell', "run-as " + paket + " sh -c 'cat > " + target + ".tmp && mv " + target + ".tmp " + target + "'"],
+          JSON.stringify({ port, emailPemilik, password, sandiBaru: sandi(), bukti }));
         break;
       }
       await tunggu(1000);
+    }
+    if (bukti) {
+      for (let i = 0; i < 480 && flutter.exitCode === null; i++) {
+        if (run(['shell', 'if run-as ' + paket + ' test -s ' + target + '.png 2>/dev/null; then echo siap; fi']).trim() === 'siap') {
+          const gambar = execFileSync(adb, ['-s',device,'exec-out','run-as',paket,'cat',target + '.png'], {windowsHide:true,maxBuffer:16*1024*1024});
+          assert.equal(gambar.subarray(1,4).toString(),'PNG');
+          const folder = path.resolve('../docs/bukti');
+          fs.mkdirSync(folder,{recursive:true});
+          fs.writeFileSync(path.join(folder,'form-pegawai-pixel8.png'),gambar);
+          break;
+        }
+        await tunggu(700);
+      }
     }
     assert.equal((await selesai)[0], 0, 'tes emulator');
   } finally {
@@ -82,6 +99,7 @@ async function main() {
     const sebelum = snapshot();
     admin(fs.readFileSync('database/03_role_warga.sql', 'utf8'), db);
     admin(fs.readFileSync('database/04_prosedur_pegawai.sql', 'utf8'), db);
+    admin(fs.readFileSync('database/05_lowongan.sql', 'utf8'), db);
     assert.ok(snapshot() === sebelum, 'ID, role dan hash lama harus identik');
 
     const sandiPublik = akunMysql(publik);
@@ -89,8 +107,9 @@ async function main() {
     const sandiKatalog = akunMysql(katalog);
     admin("GRANT SELECT (id,nama,email,password_hash,role), INSERT (nama,email,password_hash) ON " + db + ".users TO '" + publik + "'@'localhost';");
     const demoManual = process.argv[2] === '--demo';
-    const izinKatalog = demoManual ? 'SELECT, INSERT, UPDATE, DELETE' : 'SELECT';
+    const izinKatalog = 'SELECT, INSERT, UPDATE, DELETE';
     for (const tabel of ['kategori','barang']) admin("GRANT " + izinKatalog + " ON " + db + "." + tabel + " TO '" + katalog + "'@'localhost';");
+    admin("GRANT SELECT, INSERT (judul), UPDATE (aktif) ON " + db + ".lowongan TO '" + katalog + "'@'localhost';");
     admin("GRANT EXECUTE ON PROCEDURE " + db + ".tambah_pegawai TO '" + staf + "'@'localhost';");
     const listener = net.createServer().listen(0, '127.0.0.1');
     await once(listener, 'listening');
@@ -110,6 +129,7 @@ async function main() {
       if (token) headers.Authorization = 'Bearer ' + token;
       const res = await fetch(api + rute, { method: metode, headers, body: JSON.stringify(body) });
       assert.equal(res.status, status, metode + ' ' + rute);
+      if (status === 204) return;
       const data = await res.json();
       assert.ok(!JSON.stringify(data).includes('password_hash'));
       return data;
@@ -124,7 +144,23 @@ async function main() {
     await http('POST','/auth/register',409,null,orang);
     const warga = await login(orang.email);
     assert.equal((await http('GET','/auth/me',200,warga)).user.role,'warga');
-    for (const rute of ['/barang','/barang/2','/barang/2/foto','/kategori']) await http('GET',rute,403,warga);
+    await http('GET','/barang',200,warga);
+    for (const rute of ['/barang/2','/barang/2/foto']) await http('GET',rute,404,warga);
+    await http('GET','/kategori',403,warga);
+    for (const [metode,rute] of [['POST','/barang'],['PATCH','/barang/2'],['DELETE','/barang/2']]) {
+      await http(metode,rute,403,warga);
+    }
+    const dibuka = (await http('POST','/lowongan',201,pemilik,{judul:'Kasir uji'})).data;
+    const tutup = '/lowongan/' + dibuka.id + '/tutup';
+    assert.deepEqual((await http('GET','/lowongan',200,warga)).data,[dibuka]);
+    for (const token of [warga,lama]) {
+      await http('POST','/lowongan',403,token,{judul:'Ditolak'});
+      await http('PATCH',tutup,403,token);
+    }
+    await http('GET','/lowongan',403,lama);
+    await http('PATCH',tutup,204,pemilik);
+    assert.deepEqual((await http('GET','/lowongan',200,warga)).data,[]);
+    assert.equal((await http('GET','/lowongan',200,pemilik)).data[0].aktif,false);
     const calon = {...orang,email:'baru@rakrapi.test'};
     await http('POST','/auth/pegawai',401,null,calon);
     for (const token of [warga,lama]) await http('POST','/auth/pegawai',403,token,calon);
@@ -135,7 +171,7 @@ async function main() {
     await http('GET','/barang',200,pegawai);
     const hashBaru = admin("SELECT password_hash FROM users WHERE email='warga@rakrapi.test'", db);
     assert.ok(await bcrypt.compare(password, hashBaru));
-    console.log('Lulus: migration menjaga akun lama; register 201 warga; duplikat 409; katalog warga 403; tambah pegawai 401/403/201; login dan hash benar.');
+    console.log('Lulus: register 201, duplikat 409, katalog warga GET 200 dan tulis 403, tambah pegawai 401/403/201. Lowongan pemilik 201/204, daftar warga 200 aktif lalu kosong, kelola oleh warga/pegawai 403.');
     if (demoManual) {
       const panduan = path.join(folder, 'akun-demo.txt');
       fs.writeFileSync(panduan, [

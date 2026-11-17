@@ -102,7 +102,8 @@ test("katalog lokal melalui HTTP", async (t) => {
       await http("POST", "/kategori", 409, pemilik, { nama: "Minyak" });
       await http("POST", "/kategori", 400, pemilik, { nama: "  " });
       assert.equal((await http("PATCH", item, 200, pemilik, { nama: "Minyak Goreng" })).data.nama, "Minyak Goreng");
-      for (const [method, route] of [["GET", "/kategori"], ["GET", item], ["POST", "/kategori"], ["PATCH", item], ["DELETE", item]]) {
+      assert.deepEqual((await http("GET", "/kategori", 200, pegawai)).data, [{id:data.id,nama:"Minyak Goreng"}]);
+      for (const [method, route] of [["GET", item], ["POST", "/kategori"], ["PATCH", item], ["DELETE", item]]) {
         await http(method, route, 403, pegawai);
       }
       await http("GET", item, 401);
@@ -158,7 +159,7 @@ test("katalog lokal melalui HTTP", async (t) => {
       await http("POST", "/barang", 400, pemilik, form({ ...jenis, kategori_id: 4294967295 }, png));
       assert.deepEqual(await fileList(), []);
       assert.deepEqual((await http("GET", "/barang", 200, pegawai)).data, []);
-      const { data } = await http("POST", "/barang", 201, pemilik, form(jenis, png));
+      const { data } = await http("POST", "/barang", 201, pegawai, form(jenis, png));
       const item = "/barang/" + data.id;
       const foto = item + "/foto";
       assert.equal(data.nama_kategori, cat.nama);
@@ -166,8 +167,6 @@ test("katalog lokal melalui HTTP", async (t) => {
       await http("GET", foto, 401);
       assert.equal((await http("GET", item, 200, pegawai)).data.nama, jenis.nama);
       assert.equal((await http("GET", "/barang", 200, pegawai)).data.length, 1);
-      await http("POST", "/barang", 403, pegawai, form(jenis, png));
-      await http("PATCH", item, 403, pegawai, { stok: 99 });
       await http("DELETE", item, 403, pegawai);
       const filesBefore = await fileList();
       assert.equal(filesBefore.length, 1);
@@ -178,7 +177,7 @@ test("katalog lokal melalui HTTP", async (t) => {
       }
       await http("PATCH", item, 400, pemilik, form({ kategori_id: 4294967295 }, jpg, "image/jpeg"));
       assert.deepEqual(await fileList(), filesBefore);
-      const setelah = (await http("PATCH", item, 200, pemilik, { harga_rupiah: 20000, stok: 10 })).data;
+      const setelah = (await http("PATCH", item, 200, pegawai, { harga_rupiah: 20000, stok: 10 })).data;
       assert.equal(setelah.harga_rupiah, 20000);
       assert.equal(Number(setelah.stok), 10);
       assert.deepEqual(await fileList(), filesBefore);
@@ -205,7 +204,7 @@ test("katalog lokal melalui HTTP", async (t) => {
       }
       assert.deepEqual((await http("GET", item, 200, pegawai)).data, setelah);
       assert.deepEqual(await http("GET", foto, 200, pegawai), png);
-      const kilo = (await http("PATCH", item, 200, pemilik, form({ satuan: "kg", stok: "2,125" }, jpg, "image/jpeg"))).data;
+      const kilo = (await http("PATCH", item, 200, pegawai, form({ satuan: "kg", stok: "2,125" }, jpg, "image/jpeg"))).data;
       assert.equal(kilo.stok, "2.125");
       assert.deepEqual(await http("GET", foto, 200, pemilik), jpg);
       assert.equal((await fileList()).length, 1);

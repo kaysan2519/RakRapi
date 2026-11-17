@@ -1,6 +1,6 @@
 # RakRapi
 
-RakRapi adalah katalog toko untuk Android. Pemilik memperbarui kategori, harga, stok, dan foto. Pegawai membuka katalog yang sama. Pendaftaran publik membuat akun warga dengan akses ke beranda bansos.
+RakRapi adalah katalog toko untuk Android. Ketiga peran masuk ke katalog. Pemilik mengelola kategori, pegawai, dan lowongan. Pemilik serta pegawai dapat menambah dan mengubah barang. Warga membaca katalog, melihat lowongan aktif, dan membuka tab Bansos.
 
 ## Menjalankan demo lokal
 

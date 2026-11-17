@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'api.dart';
 import 'form_akun.dart';
 import 'katalog.dart';
+import 'lowongan.dart';
 
 void main() => runApp(const RakRapi());
 
@@ -95,28 +96,21 @@ class _RakRapiState extends State<RakRapi> {
       );
     } else if (pengguna == null) {
       layar = LayarMasuk(masuk: masuk, daftar: api.daftarWarga);
+    } else if (pengguna!['role'] == 'warga') {
+      layar = BerandaWarga(api: api, nama: pengguna!['nama'], keluar: keluar);
     } else if (pengguna!['role'] == 'pemilik' ||
         pengguna!['role'] == 'pegawai') {
-      layar = DaftarBarang(
-        api: api,
-        pemilik: pengguna!['role'] == 'pemilik',
-        keluar: keluar,
-      );
+      layar = DaftarBarang(api: api, role: pengguna!['role'], keluar: keluar);
     } else {
-      final warga = pengguna!['role'] == 'warga';
       layar = Scaffold(
         appBar: AppBar(
-          title: Text(warga ? 'Bansos' : 'Akun'),
+          title: const Text('Akun'),
           actions: [TextButton(onPressed: keluar, child: const Text('Keluar'))],
         ),
         body: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(24),
-            child: Text(
-              warga
-                  ? 'Selamat datang, ${pengguna!['nama']}.'
-                  : 'Peran akun tidak dikenal.',
-            ),
+            child: const Text('Peran akun tidak dikenal.'),
           ),
         ),
       );
@@ -134,6 +128,57 @@ class _RakRapiState extends State<RakRapi> {
       home: layar,
     );
   }
+}
+
+class BerandaWarga extends StatefulWidget {
+  const BerandaWarga({
+    super.key,
+    required this.api,
+    required this.nama,
+    required this.keluar,
+  });
+  final RakRapiApi api;
+  final String nama;
+  final VoidCallback keluar;
+
+  @override
+  State<BerandaWarga> createState() => _BerandaWargaState();
+}
+
+class _BerandaWargaState extends State<BerandaWarga> {
+  int tab = 0;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    body: switch (tab) {
+      0 => DaftarBarang(api: widget.api, role: 'warga', keluar: widget.keluar),
+      1 => LayarLowongan(api: widget.api, pemilik: false),
+      _ => Scaffold(
+        appBar: AppBar(title: const Text('Bansos')),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text('Selamat datang, ${widget.nama}.'),
+          ),
+        ),
+      ),
+    },
+    bottomNavigationBar: NavigationBar(
+      selectedIndex: tab,
+      onDestinationSelected: (index) => setState(() => tab = index),
+      destinations: const [
+        NavigationDestination(icon: Icon(Icons.storefront), label: 'Katalog'),
+        NavigationDestination(
+          icon: Icon(Icons.work_outline),
+          label: 'Lowongan',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.volunteer_activism_outlined),
+          label: 'Bansos',
+        ),
+      ],
+    ),
+  );
 }
 
 class LayarMasuk extends StatefulWidget {

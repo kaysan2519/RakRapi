@@ -18,7 +18,7 @@ Status 200 berarti query melalui Drizzle mengembalikan nama database
 
 Ikuti permintaan pegawai yang sudah masuk dan membuka `GET /api/barang/2`. Tiga file pertama menunjukkan alur utamanya.
 
-1. [barang.routes.ts](src/routes/barang.routes.ts) memasangkan `GET /:id` dengan `detailBarang`. Awalan `/api/barang` terdaftar di [app.ts](src/app.ts). Sebelum controller dipanggil, `perluLogin` memeriksa JWT dan memuat profil. Lalu `perluRole("pemilik", "pegawai")` memeriksa hak baca. Kedua pemeriksaan ada di [akses.middleware.ts](src/middleware/akses.middleware.ts).
+1. [barang.routes.ts](src/routes/barang.routes.ts) memasangkan `GET /:id` dengan `detailBarang`. Awalan `/api/barang` terdaftar di [app.ts](src/app.ts). Sebelum controller dipanggil, `perluLogin` memeriksa JWT dan memuat profil. Lalu `perluRole("pemilik", "pegawai", "warga")` memeriksa hak baca. Kedua pemeriksaan ada di [akses.middleware.ts](src/middleware/akses.middleware.ts).
 2. [barang.controller.ts](src/controllers/barang.controller.ts) berisi `detailBarang`. Fungsi ini membaca `"2"` dari URL. `bilanganBulat` memvalidasinya menjadi angka `2`. Controller meneruskan angka itu ke `ambilDetailBarang`, lalu mengirim hasilnya sebagai JSON `{ data }`.
 3. [barang.service.ts](src/services/barang.service.ts) berisi `ambilDetailBarang`. Fungsi ini memakai query `barangDenganKategori` dan memilih baris dengan `barang.id = 2`. `innerJoin` mencocokkan `barang.kategori_id` dengan `kategori.id`, sehingga `kategori.nama` bisa dikirim sebagai `nama_kategori`. Jika baris kosong, hasilnya 404. Untuk barang yang ditemukan, `sertakanUrlFoto` menambahkan `/api/barang/2/foto`.
 
@@ -69,16 +69,24 @@ dan `.env`.
 
 Mulai MySQL Laragon di port 3306. Gunakan `.env` yang sudah disiapkan pada
 komputer ini. Akun `rakrapi_katalog@localhost` melalui `CATALOG_DB_USER` dan
-`CATALOG_DB_PASSWORD` hanya mempunyai SELECT, INSERT, UPDATE, dan DELETE
-pada `rakrapi.kategori` dan `rakrapi.barang`.
+`CATALOG_DB_PASSWORD` mempunyai SELECT, INSERT, UPDATE, dan DELETE
+pada `rakrapi.kategori` dan `rakrapi.barang`. Pada database baru, jalankan `database/05_lowongan.sql`, lalu beri akun katalog hak berikut.
+
+```sql
+GRANT SELECT, INSERT (judul), UPDATE (aktif) ON rakrapi.lowongan TO 'rakrapi_katalog'@'localhost';
+```
 
 | Endpoint (awalan `/api`) | Akses | Hasil |
 |---|---|---|
-| GET /kategori, GET /kategori/:id | Pemilik | Daftar/detail kategori |
+| GET /kategori | Pemilik, pegawai | ID dan nama kategori |
+| GET /kategori/:id | Pemilik | Detail kategori |
 | POST /kategori, PATCH /kategori/:id, DELETE /kategori/:id | Pemilik | Tambah, ubah nama, hapus kategori kosong |
-| GET /barang, GET /barang/:id | Pemilik, pegawai | Data barang, nama kategori hasil INNER JOIN, dan `foto_url` |
-| GET /barang/:id/foto | Pemilik, pegawai | Byte foto asli; kirim Bearer token juga ke URL ini |
-| POST /barang, PATCH /barang/:id, DELETE /barang/:id | Pemilik | Tambah, ubah, hapus barang beserta fotonya |
+| GET /barang, GET /barang/:id | Ketiga peran | Data barang, nama kategori hasil INNER JOIN, dan `foto_url` |
+| GET /barang/:id/foto | Ketiga peran | Byte foto asli dengan Bearer token |
+| POST /barang, PATCH /barang/:id | Pemilik, pegawai | Tambah atau ubah barang dan foto |
+| DELETE /barang/:id | Pemilik | Hapus barang beserta fotonya |
+| GET /lowongan | Pemilik, warga | Semua untuk pemilik, hanya yang aktif untuk warga |
+| POST /lowongan, PATCH /lowongan/:id/tutup | Pemilik | Buka lowongan dengan field `judul` atau tutup lowongan |
 
 Untuk menambah barang, kirim `multipart/form-data` dengan `nama`,
 `kategori_id`, `harga_rupiah`, `stok`, `satuan`, dan satu file pada kolom

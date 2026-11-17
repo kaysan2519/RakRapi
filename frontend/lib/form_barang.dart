@@ -96,8 +96,14 @@ class _DialogKategoriState extends State<_DialogKategori> {
 }
 
 class FormBarang extends StatefulWidget {
-  const FormBarang({super.key, required this.api, this.barang});
+  const FormBarang({
+    super.key,
+    required this.api,
+    required this.bolehTambahKategori,
+    this.barang,
+  });
   final RakRapiApi api;
+  final bool bolehTambahKategori;
   final Json? barang;
   @override
   State<FormBarang> createState() => _FormBarangState();
@@ -276,22 +282,24 @@ class _FormBarangState extends State<FormBarang> {
                   onChanged: mengirim || memuatKategori
                       ? null
                       : (v) => setState(() => kategoriId = v),
-                  validator: (v) =>
-                      v == null ? 'Pilih atau tambahkan kategori.' : null,
+                  validator: (v) => v == null ? 'Pilih kategori barang.' : null,
                 ),
                 if (memuatKategori) const LinearProgressIndicator(),
                 if (masalahKategori != null)
                   PesanGagal(masalahKategori!, ulangi: muatKategori),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: mengirim || memuatKategori
-                        ? null
-                        : tambahKategori,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Tambah kategori'),
-                  ),
-                ),
+                if (widget.bolehTambahKategori)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: mengirim || memuatKategori
+                          ? null
+                          : tambahKategori,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Tambah kategori'),
+                    ),
+                  )
+                else
+                  const SizedBox(height: 16),
                 TextFormField(
                   controller: harga,
                   enabled: !mengirim,

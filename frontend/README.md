@@ -33,7 +33,7 @@ Alur kode dimulai di `lib/main.dart` untuk masuk dan memulihkan sesi. Buka `lib/
 
 ### Mencoba tiga peran
 
-Gunakan **Daftar sebagai warga** pada layar Masuk untuk membuat akun pribadi. Masuk dengan akun itu untuk membuka halaman **Bansos**. Untuk membuat akun pegawai, masuk sebagai pemilik dan buka **Menu pemilik (⋮) → Tambah pegawai** pada daftar barang. Pilih **Keluar** untuk berganti akun. Pegawai dapat membuka katalog dan foto, sedangkan pemilik juga dapat mengelola barang. Saat aplikasi dibuka kembali, sesi yang masih berlaku membuka halaman sesuai peran dari API.
+Gunakan **Daftar sebagai warga** pada layar Masuk untuk membuat akun pribadi. Akun warga membuka **Katalog** dan bisa memilih tab **Lowongan** atau **Bansos**. Untuk membuat akun pegawai, masuk sebagai pemilik dan buka **Menu pemilik (⋮) → Tambah pegawai** pada daftar barang. Pilih **Keluar** untuk berganti akun. Pegawai memakai formulir barang yang sama dengan pemilik dan memilih kategori yang sudah tersedia. Hapus barang, pengelolaan kategori dan lowongan, serta tambah pegawai hanya tersedia untuk pemilik. Saat aplikasi dibuka kembali, sesi yang masih berlaku membuka Katalog.
 
 ### Uji pengembang
 

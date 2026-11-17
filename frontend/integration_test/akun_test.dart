@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:rakrapi/api.dart';
@@ -9,15 +10,14 @@ import 'package:rakrapi/form_akun.dart';
 import 'package:rakrapi/main.dart';
 
 void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   testWidgets(
     'Daftar warga, tambah pegawai, dan pulihkan sesi tiga peran',
     (tester) async {
       const kode = String.fromEnvironment('KODE_UJI');
       expect(kode, matches(RegExp(r'^[0-9a-f]{16}$')));
-      final file = File(
-        '/data/user/0/com.example.rakrapi/files/rakrapi-uji-akun-$kode',
-      );
+      final folder = Directory.systemTemp.parent.path;
+      final file = File('$folder/files/rakrapi-uji-akun-$kode');
       final siap = File('${file.path}.siap');
       await siap.writeAsString('');
       final batas = DateTime.now().add(const Duration(minutes: 2));
@@ -91,10 +91,17 @@ void main() {
       }
       await tekan(find.text('Daftar sebagai warga'));
       await isiForm('Warga emulator', 'warga.emulator@rakrapi.test');
-      await masuk('warga.emulator@rakrapi.test', data['sandiBaru'], 'Bansos');
+      await masuk(
+        'warga.emulator@rakrapi.test',
+        data['sandiBaru'],
+        'Daftar barang',
+      );
+      await tunggu(find.text('Katalog'));
+      expect(find.text('Tambah barang'), findsNothing);
+      await tekan(find.text('Bansos'));
+      await tunggu(find.text('Selamat datang, Warga emulator.'));
       await bukaLagi();
-      await tunggu(find.text('Bansos'));
-      expect(find.text('Daftar barang'), findsNothing);
+      await tunggu(find.text('Daftar barang'));
       await tekan(find.text('Keluar'));
 
       await masuk(emailPemilik, data['password'], 'Daftar barang');
@@ -105,6 +112,15 @@ void main() {
       await tunggu(
         find.text('Akun pegawai pegawai.emulator@rakrapi.test dibuat.'),
       );
+      await tekan(find.byTooltip('Menu pemilik'));
+      await tekan(find.text('Kelola lowongan'));
+      await tester.enterText(find.byType(TextField), 'Penjaga toko uji');
+      await tekan(find.text('Buka lowongan'));
+      await tunggu(find.text('Penjaga toko uji'));
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      final apiPemilik = RakRapiApi(alamat: url)..token = cek['token'];
+      await apiPemilik.tambahKategori('Sembako uji');
       await tekan(find.text('Keluar'));
 
       await masuk(
@@ -115,10 +131,111 @@ void main() {
       await bukaLagi();
       await tunggu(find.text('Daftar barang'));
       expect(find.byTooltip('Menu pemilik'), findsNothing);
-      expect(find.text('Tambah barang'), findsNothing);
+      await tekan(find.text('Tambah barang'));
+      expect(find.text('Tambah kategori'), findsNothing);
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Nama barang'),
+        'Beras uji',
+      );
+      await tekan(find.byType(DropdownButtonFormField<int>));
+      await tekan(find.text('Sembako uji').last);
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Harga per satuan'),
+        '25000',
+      );
+      await tester.enterText(find.widgetWithText(TextFormField, 'Stok'), '8');
+      await tekan(find.byType(DropdownButtonFormField<String>));
+      await tekan(find.text('kg').last);
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+
+      // Hanya pilihan berkas Android yang disimulasikan. Form, upload, API dan MySQL berjalan asli.
+      final fotoUji = File('${Directory.systemTemp.path}/barang-uji.png');
+      final gambar = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAO0lEQVR4nO3RQREAMAjEwKNCq7laUFAJ4cMvK+CYCdXvZtNZXY8HBvwBMhEyETIRMhEyETIRMhEyUcgHUgkCYJsgX6IAAAAASUVORK5CYII=',
+      );
+      await fotoUji.writeAsBytes(gambar);
+      const kanal =
+          'dev.flutter.pigeon.image_picker_android.ImagePickerApi.pickImages';
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMessageHandler(
+        kanal,
+        (_) async => const StandardMessageCodec().encodeMessage([
+          [fotoUji.path],
+        ]),
+      );
+      addTearDown(() => messenger.setMockMessageHandler(kanal, null));
+      await tekan(find.text('Pilih foto'));
+      await tunggu(find.bySemanticsLabel('Pratinjau foto'));
+      if (data['bukti'] == true) {
+        await binding.convertFlutterSurfaceToImage();
+        await tester.pumpAndSettle();
+        final bytes = await binding.takeScreenshot('form-pegawai');
+        await File('${file.path}.png').writeAsBytes(bytes, flush: true);
+      }
+      await tekan(find.text('Simpan'));
+      await tunggu(find.text('Detail barang'));
+      await tunggu(find.bySemanticsLabel('Foto barang'));
+      expect(find.text('Hapus barang'), findsNothing);
+      await tekan(find.text('Ubah barang'));
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Harga per satuan'),
+        '26000',
+      );
+      await tekan(find.text('Simpan'));
+      await tunggu(find.text('Rp26.000'));
+      final barang = (await apiPemilik.daftarBarang()).single;
+      expect(barang['harga_rupiah'], 26000);
+      expect(await apiPemilik.foto(barang['id']), orderedEquals(gambar));
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tekan(find.text('Keluar'));
+      await masuk(
+        'warga.emulator@rakrapi.test',
+        data['sandiBaru'],
+        'Daftar barang',
+      );
+      await tekan(find.text('Lowongan'));
+      await tunggu(find.text('Penjaga toko uji'));
+      await tekan(find.text('Katalog'));
+      await tekan(find.text('Keluar'));
+      await masuk(emailPemilik, data['password'], 'Daftar barang');
+      await tekan(find.byTooltip('Menu pemilik'));
+      await tekan(find.text('Kelola lowongan'));
+      await tekan(find.text('Tutup'));
+      await tunggu(
+        find.descendant(
+          of: find.widgetWithText(ListTile, 'Penjaga toko uji'),
+          matching: find.text('Ditutup'),
+        ),
+      );
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tekan(find.text('Keluar'));
+      await masuk(
+        'warga.emulator@rakrapi.test',
+        data['sandiBaru'],
+        'Daftar barang',
+      );
+      await tekan(find.text('Lowongan'));
+      await tekan(find.byTooltip('Muat ulang'));
+      await tunggu(find.text('Belum ada lowongan aktif.'));
+      expect(find.text('Penjaga toko uji'), findsNothing);
+      await apiPemilik.bukaLowongan('Kurir uji');
+      await tekan(find.byTooltip('Muat ulang'));
+      await tunggu(find.text('Kurir uji'));
+      final kurir = (await apiPemilik.lowongan()).singleWhere(
+        (l) => l['judul'] == 'Kurir uji',
+      );
+      await apiPemilik.tutupLowongan(kurir['id']);
+      await tekan(find.byTooltip('Muat ulang'));
+      await tunggu(find.text('Belum ada lowongan aktif.'));
+      expect(find.text('Kurir uji'), findsNothing);
+      await tekan(find.text('Katalog'));
       await tekan(find.text('Keluar'));
       await tunggu(find.text('Masuk'));
     },
-    timeout: const Timeout(Duration(minutes: 5)),
+    timeout: const Timeout(Duration(minutes: 8)),
   );
 }

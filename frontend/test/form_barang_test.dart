@@ -49,6 +49,7 @@ void main() {
         MaterialApp(
           home: FormBarang(
             api: api,
+            bolehTambahKategori: false,
             barang: const {
               'id': 1,
               'kategori_id': 1,

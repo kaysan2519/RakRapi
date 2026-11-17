@@ -5,6 +5,7 @@ import 'api.dart';
 import 'form_barang.dart';
 import 'form_akun.dart';
 import 'kategori.dart';
+import 'lowongan.dart';
 
 class PesanGagal extends StatelessWidget {
   const PesanGagal(this.pesan, {super.key, this.ulangi});
@@ -31,11 +32,13 @@ class DaftarBarang extends StatefulWidget {
   const DaftarBarang({
     super.key,
     required this.api,
-    required this.pemilik,
+    required this.role,
     required this.keluar,
   });
   final RakRapiApi api;
-  final bool pemilik;
+  final String role;
+  bool get pemilik => role == 'pemilik';
+  bool get bolehMenulis => pemilik || role == 'pegawai';
   final VoidCallback keluar;
   @override
   State<DaftarBarang> createState() => _DaftarBarangState();
@@ -61,7 +64,7 @@ class _DaftarBarangState extends State<DaftarBarang> {
       context,
       MaterialPageRoute(
         builder: (_) =>
-            DetailBarang(api: widget.api, id: id, pemilik: widget.pemilik),
+            DetailBarang(api: widget.api, id: id, role: widget.role),
       ),
     );
     if (mounted) muatUlang();
@@ -70,7 +73,10 @@ class _DaftarBarangState extends State<DaftarBarang> {
   Future<void> tambahBarang() async {
     final id = await Navigator.push<int>(
       context,
-      MaterialPageRoute(builder: (_) => FormBarang(api: widget.api)),
+      MaterialPageRoute(
+        builder: (_) =>
+            FormBarang(api: widget.api, bolehTambahKategori: widget.pemilik),
+      ),
     );
     if (mounted && id != null) await bukaDetail(id);
   }
@@ -110,6 +116,14 @@ class _DaftarBarangState extends State<DaftarBarang> {
             onSelected: (pilihan) async {
               if (pilihan == 'pegawai') {
                 await tambahPegawai();
+              } else if (pilihan == 'lowongan') {
+                await Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        LayarLowongan(api: widget.api, pemilik: true),
+                  ),
+                );
               } else if (pilihan == 'kategori') {
                 await Navigator.push<void>(
                   context,
@@ -121,6 +135,10 @@ class _DaftarBarangState extends State<DaftarBarang> {
               }
             },
             itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'lowongan',
+                child: Text('Kelola lowongan'),
+              ),
               const PopupMenuItem(
                 value: 'kategori',
                 child: Text('Kelola kategori'),
@@ -137,17 +155,18 @@ class _DaftarBarangState extends State<DaftarBarang> {
     body: SafeArea(
       child: Column(
         children: [
-          if (widget.pemilik)
+          if (widget.bolehMenulis)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
               child: Wrap(
                 spacing: 10,
                 runSpacing: 8,
                 children: [
-                  OutlinedButton(
-                    onPressed: tambahKategori,
-                    child: const Text('Tambah kategori'),
-                  ),
+                  if (widget.pemilik)
+                    OutlinedButton(
+                      onPressed: tambahKategori,
+                      child: const Text('Tambah kategori'),
+                    ),
                   FilledButton(
                     onPressed: tambahBarang,
                     child: const Text('Tambah barang'),
@@ -190,6 +209,15 @@ class _DaftarBarangState extends State<DaftarBarang> {
                     itemBuilder: (_, i) {
                       final b = barang[i];
                       return ListTile(
+                        leading: SizedBox.square(
+                          dimension: 48,
+                          child: FotoPrivat(
+                            key: ObjectKey(b),
+                            api: widget.api,
+                            id: b['id'],
+                            mini: true,
+                          ),
+                        ),
                         title: Text(b['nama']),
                         subtitle: Text(
                           '${hargaRupiah(b['harga_rupiah'])} · ${stokTampil(b)}',
@@ -214,11 +242,11 @@ class DetailBarang extends StatefulWidget {
     super.key,
     required this.api,
     required this.id,
-    required this.pemilik,
+    required this.role,
   });
   final RakRapiApi api;
   final int id;
-  final bool pemilik;
+  final String role;
   @override
   State<DetailBarang> createState() => _DetailBarangState();
 }
@@ -241,7 +269,11 @@ class _DetailBarangState extends State<DetailBarang> {
     final id = await Navigator.push<int>(
       context,
       MaterialPageRoute(
-        builder: (_) => FormBarang(api: widget.api, barang: barang),
+        builder: (_) => FormBarang(
+          api: widget.api,
+          barang: barang,
+          bolehTambahKategori: widget.role == 'pemilik',
+        ),
       ),
     );
     if (mounted && id != null) setState(muat);
@@ -331,11 +363,12 @@ class _DetailBarangState extends State<DetailBarang> {
               ],
             ),
             const Divider(),
-            if (widget.pemilik) ...[
+            if (widget.role == 'pemilik' || widget.role == 'pegawai')
               FilledButton(
                 onPressed: menghapus ? null : () => ubah(b),
                 child: const Text('Ubah barang'),
               ),
+            if (widget.role == 'pemilik') ...[
               const SizedBox(height: 8),
               OutlinedButton(
                 style: OutlinedButton.styleFrom(
@@ -366,9 +399,15 @@ class _DetailBarangState extends State<DetailBarang> {
 }
 
 class FotoPrivat extends StatefulWidget {
-  const FotoPrivat({super.key, required this.api, required this.id});
+  const FotoPrivat({
+    super.key,
+    required this.api,
+    required this.id,
+    this.mini = false,
+  });
   final RakRapiApi api;
   final int id;
+  final bool mini;
   @override
   State<FotoPrivat> createState() => _FotoPrivatState();
 }
@@ -388,6 +427,7 @@ class _FotoPrivatState extends State<FotoPrivat> {
       future: foto,
       builder: (context, hasil) {
         if (hasil.hasError) {
+          if (widget.mini) return const Icon(Icons.broken_image_outlined);
           return PesanGagal(
             hasil.error.toString(),
             ulangi: () {
@@ -405,9 +445,12 @@ class _FotoPrivatState extends State<FotoPrivat> {
           borderRadius: BorderRadius.circular(8),
           child: Image.memory(
             hasil.requireData,
+            cacheWidth: widget.mini ? 128 : null,
             fit: BoxFit.contain,
             semanticLabel: 'Foto barang',
-            errorBuilder: (_, _, _) => const Text('Foto tidak dapat dibaca.'),
+            errorBuilder: (_, _, _) => widget.mini
+                ? const Icon(Icons.broken_image_outlined)
+                : const Text('Foto tidak dapat dibaca.'),
           ),
         );
       },
