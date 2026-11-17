@@ -216,6 +216,30 @@ test("katalog lokal melalui HTTP", async (t) => {
       assert.deepEqual(await fileList(), []);
       await http("DELETE", "/kategori/" + cat.id, 204, pemilik);
     });
+    const perangkat = process.env.RAKRAPI_EMULATOR;
+    if (perangkat) {
+      await t.test("alur katalog melalui layar Android", async () => {
+        assert.match(perangkat, /^emulator-\d+$/);
+        const port = new URL(url).port;
+        const penanda = "QA-" + tag;
+        await http("POST", "/kategori", 201, pemilik, { nama: penanda });
+        const cwd = path.resolve("../frontend");
+        const opsi = { cwd, stdio: "inherit", windowsHide: true };
+        const flutter = spawn("cmd.exe", ["/d", "/c", "flutter.bat", "test",
+          "integration_test/alur_barang_test.dart", "-d", perangkat, "--no-pub", "--reporter", "expanded",
+          "--dart-define=BUKTI_SRS=" + (process.env.RAKRAPI_BUKTI_SRS === "1")], opsi);
+        const helper = spawn(process.execPath, ["integration_test/kirim_sesi.cjs", perangkat, port, penanda], opsi);
+        const selesaiHelper = once(helper, "exit");
+        try {
+          assert.equal((await once(flutter, "exit"))[0], 0, "tes tampilan katalog");
+          assert.equal((await selesaiHelper)[0], 0, "konfigurasi APK uji");
+        } finally {
+          if (helper.exitCode === null && helper.signalCode === null) helper.kill();
+          const adb = path.join(process.env.LOCALAPPDATA, "Android/Sdk/platform-tools/adb.exe");
+          execFileSync(adb, ["-s", perangkat, "reverse", "--remove", "tcp:" + port], {windowsHide: true});
+        }
+      });
+    }
   } finally {
     await stop();
     if (dibuatAkun) admin("DROP USER '" + account + "'@'localhost';");

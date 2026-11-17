@@ -129,6 +129,18 @@ class RakRapiApi {
       ((await _json('GET', '/kategori'))['data'] as List).cast<Json>();
   Future<Json> tambahKategori(String nama) async =>
       (await _json('POST', '/kategori', isi: {'nama': nama}))['data'] as Json;
+
+  Future<Json> detailKategori(int id) async =>
+      (await _json('GET', '/kategori/$id'))['data'] as Json;
+
+  Future<Json> ubahKategori(int id, String nama) async =>
+      (await _json('PATCH', '/kategori/$id', isi: {'nama': nama}))['data']
+          as Json;
+
+  Future<void> hapusKategori(int id) async {
+    await _json('DELETE', '/kategori/$id');
+  }
+
   Future<void> hapus(int id) async {
     await _json('DELETE', '/barang/$id');
   }

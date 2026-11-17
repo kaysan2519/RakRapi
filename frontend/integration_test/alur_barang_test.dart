@@ -8,7 +8,7 @@ import 'package:rakrapi/api.dart';
 import 'package:rakrapi/main.dart';
 
 void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
     'Pegawai membaca katalog utama, pemilik menyimpan di katalog uji',
@@ -39,8 +39,17 @@ void main() {
       Future<void> tekan(Finder widget) async {
         await tunggu(widget);
         await tester.ensureVisible(widget.first);
-        await tester.tap(widget.first);
-        await tester.pump();
+        await tester.pumpAndSettle();
+        await tunggu(widget.hitTestable());
+        await tester.tap(widget.hitTestable().first);
+        await tester.pumpAndSettle();
+      }
+
+      Future<void> kembali() async {
+        // Tunggu animasi rute selesai agar hanya tombol kembali layar aktif yang dipilih.
+        await tester.pumpAndSettle();
+        await tester.pageBack();
+        await tester.pumpAndSettle();
       }
 
       Future<void> masuk(String role) async {
@@ -68,11 +77,18 @@ void main() {
       expect(find.text('Minyak Goreng'), findsOneWidget);
       expect(find.text('Hapus barang'), findsNothing);
       expect(find.text('Ubah barang'), findsNothing);
+      if (const bool.fromEnvironment('BUKTI_SRS')) {
+        await binding.convertFlutterSurfaceToImage();
+        await tester.pumpAndSettle();
+        final gambar = await binding.takeScreenshot('detail-pegawai');
+        await File(
+          '/data/user/0/com.example.rakrapi/files/detail-pegawai.png',
+        ).writeAsBytes(gambar);
+      }
       debugPrint(
         'UI pegawai: detail ID 2, harga, stok dan foto privat tampil.',
       );
-      await tester.pageBack();
-      await tester.pumpAndSettle();
+      await kembali();
       expect(find.text('Tambah barang'), findsNothing);
       await tester.pumpWidget(const SizedBox());
       await tester.pumpWidget(RakRapi(api: RakRapiApi(alamat: utama.alamat)));
@@ -119,15 +135,58 @@ void main() {
       expect(find.text('Kategori UI'), findsOneWidget);
       expect(find.text('Ubah barang'), findsOneWidget);
       final barang = (await terpisah.daftarBarang()).single;
+      final id = barang['id'] as int;
+      final fotoAwal = await terpisah.foto(id);
+      await tekan(find.text('Ubah barang'));
+      final kolomHarga = find.widgetWithText(TextFormField, 'Harga per satuan');
+      await tunggu(kolomHarga);
+      await tester.enterText(kolomHarga, '25500');
+      await tekan(find.text('Simpan'));
+      await tunggu(find.text('Rp25.500'));
+      expect(await terpisah.foto(id), orderedEquals(fotoAwal));
       debugPrint(
         'UI pemilik: kategori langsung terpilih, unggah dan detail ID ${barang['id']} lulus.',
       );
-      await tester.pageBack();
-      await tester.pumpAndSettle();
+      await kembali();
+      await tekan(find.byTooltip('Menu pemilik'));
+      await tekan(find.text('Kelola kategori'));
+      await tekan(find.text('Kategori UI'));
+      await tekan(find.text('Ubah'));
+      await tester.enterText(find.byType(TextField), 'Kategori baru UI');
+      await tekan(find.text('Simpan'));
+      await tunggu(find.text('Kategori baru UI'));
+      Future<void> konfirmasiHapus(String pilihan) async {
+        await tekan(find.widgetWithText(OutlinedButton, 'Hapus'));
+        await tekan(
+          find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.text(pilihan),
+          ),
+        );
+      }
+
+      await konfirmasiHapus('Batal');
+      expect(find.text('Kategori baru UI'), findsOneWidget);
+      await konfirmasiHapus('Hapus');
+      await tunggu(
+        find.text(
+          'Kategori ini masih digunakan. Kategori bisa dihapus setelah tidak ada barang yang menggunakannya.',
+        ),
+      );
+      await kembali();
+      await tekan(find.text(uji['penanda']));
+      await tunggu(find.text('Detail kategori'));
+      await konfirmasiHapus('Hapus');
+      await tunggu(find.text('Kelola kategori'));
+      await tunggu(find.text('Kategori baru UI'));
+      expect(find.text(uji['penanda']), findsNothing);
+      await kembali();
       await tekan(find.text('Keluar'));
       await masuk('pegawai');
       await tekan(find.text('Produk UI'));
       await tunggu(find.bySemanticsLabel('Foto barang'));
+      expect(find.text('Rp25.500'), findsOneWidget);
+      expect(find.text('Kategori baru UI'), findsOneWidget);
       expect(find.text('Ubah barang'), findsNothing);
       debugPrint('UI pegawai: barang dan foto baru dari API uji terbuka.');
     },

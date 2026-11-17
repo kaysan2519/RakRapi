@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'api.dart';
 import 'form_barang.dart';
 import 'form_akun.dart';
+import 'kategori.dart';
 
 class PesanGagal extends StatelessWidget {
   const PesanGagal(this.pesan, {super.key, this.ulangi});
@@ -106,8 +107,24 @@ class _DaftarBarangState extends State<DaftarBarang> {
         if (widget.pemilik)
           PopupMenuButton<String>(
             tooltip: 'Menu pemilik',
-            onSelected: (_) => tambahPegawai(),
+            onSelected: (pilihan) async {
+              if (pilihan == 'pegawai') {
+                await tambahPegawai();
+              } else if (pilihan == 'kategori') {
+                await Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DaftarKategori(api: widget.api),
+                  ),
+                );
+                if (mounted) muatUlang();
+              }
+            },
             itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'kategori',
+                child: Text('Kelola kategori'),
+              ),
               const PopupMenuItem(
                 value: 'pegawai',
                 child: Text('Tambah pegawai'),

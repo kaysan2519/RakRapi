@@ -5,22 +5,26 @@ import 'package:image_picker/image_picker.dart';
 import 'api.dart';
 import 'katalog.dart' show FotoPrivat, PesanGagal;
 
-Future<Json?> dialogKategori(BuildContext context, RakRapiApi api) =>
-    showDialog<Json>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => _DialogKategori(api: api),
-    );
+Future<Json?> dialogKategori(
+  BuildContext context,
+  RakRapiApi api, {
+  Json? kategori,
+}) => showDialog<Json>(
+  context: context,
+  barrierDismissible: false,
+  builder: (_) => _DialogKategori(api: api, kategori: kategori),
+);
 
 class _DialogKategori extends StatefulWidget {
-  const _DialogKategori({required this.api});
+  const _DialogKategori({required this.api, this.kategori});
   final RakRapiApi api;
+  final Json? kategori;
   @override
   State<_DialogKategori> createState() => _DialogKategoriState();
 }
 
 class _DialogKategoriState extends State<_DialogKategori> {
-  final nama = TextEditingController();
+  late final nama = TextEditingController(text: widget.kategori?['nama']);
   bool sibuk = false;
   String? pesan;
   @override
@@ -40,7 +44,11 @@ class _DialogKategoriState extends State<_DialogKategori> {
       pesan = null;
     });
     try {
-      final hasil = await widget.api.tambahKategori(nama.text.trim());
+      final id = widget.kategori?['id'] as int?;
+      final nilai = nama.text.trim();
+      final hasil = id == null
+          ? await widget.api.tambahKategori(nilai)
+          : await widget.api.ubahKategori(id, nilai);
       if (mounted) Navigator.pop(context, hasil);
     } catch (e) {
       if (mounted) {
@@ -56,7 +64,9 @@ class _DialogKategoriState extends State<_DialogKategori> {
   Widget build(BuildContext context) => PopScope(
     canPop: !sibuk,
     child: AlertDialog(
-      title: const Text('Tambah kategori'),
+      title: Text(
+        widget.kategori == null ? 'Tambah kategori' : 'Ubah kategori',
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

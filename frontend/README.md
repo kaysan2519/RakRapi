@@ -37,6 +37,14 @@ Gunakan **Daftar sebagai warga** pada layar Masuk untuk membuat akun pribadi. Ma
 
 ### Uji pengembang
 
-`flutter test` menjalankan tes formulir tanpa MySQL. Untuk tes perangkat, siapkan API kedua pada port terpisah dengan database katalog dan direktori unggahan sementara. Database itu harus memiliki nol barang dan tepat satu kategori penanda bernama `QA-` diikuti 16 digit heksadesimal unik. Login memakai dua akun demo lokal. Galeri emulator perlu satu foto uji.
+`flutter test` menjalankan tes formulir tanpa MySQL. Untuk menguji ketiga peran dan katalog dari layar emulator, aktifkan API utama dan Pixel 8, siapkan satu foto uji di galeri, lalu jalankan dari PowerShell:
 
-Di folder ini, jalankan `flutter test integration_test/alur_barang_test.dart -d emulator-5554`. Di terminal kedua, jalankan `node integration_test/kirim_sesi.cjs emulator-5554 PORT_UJI NAMA_PENANDA` dengan nilai dari lingkungan uji tersebut. Pilih foto uji ketika galeri terbuka. Tes membaca minyak goreng dari API utama dan memeriksa penanda sebelum menulis ke API kedua.
+```powershell
+Set-Location C:\Users\Kaysan\UjiLevel\backend
+node --env-file=.env test/akun.cjs emulator-5554
+$env:RAKRAPI_EMULATOR = 'emulator-5554'
+node --env-file=.env --test test/katalog.cjs
+Remove-Item Env:RAKRAPI_EMULATOR
+```
+
+Kedua pengujian menyiapkan database sementara dan membersihkannya setelah selesai. Pada tes katalog, pegawai membaca ID 2 di API utama. Pemilik menambahkan barang di API uji, mengubah harga, memeriksa konfirmasi hapus kategori dan pesan kategori terpakai. Pilih foto uji kemudian tekan **Done** jika pemilih Android menampilkannya. Tes kembali masuk sebagai pegawai dan membaca hasil perubahan.
