@@ -1,4 +1,5 @@
-import { boolean, decimal, int, mysqlTable, varchar } from "drizzle-orm/mysql-core";
+import { sql } from "drizzle-orm";
+import { boolean, char, datetime, decimal, int, mysqlEnum, mysqlTable, varchar } from "drizzle-orm/mysql-core";
 
 // Pemetaan untuk query ke tabel Laragon yang sudah ada.
 export const users = mysqlTable("users", {
@@ -10,6 +11,26 @@ export const users = mysqlTable("users", {
 });
 
 export type Role = typeof users.$inferSelect.role;
+
+export const pesanan = mysqlTable("pesanan", {
+  id: int("id", { unsigned: true }).primaryKey().autoincrement(),
+  warga_id: int("warga_id", { unsigned: true }).notNull(),
+  nama_pemesan: varchar("nama_pemesan", { length: 100 }).notNull(),
+  kunci_kirim: char("kunci_kirim", { length: 32 }).notNull(),
+  status: mysqlEnum("status", ["Menunggu konfirmasi", "Dikonfirmasi"]).notNull().default("Menunggu konfirmasi"),
+  total_rupiah: decimal("total_rupiah", { precision: 32, scale: 0 }).notNull(),
+  dibuat: datetime("dibuat", { mode: "string" }).notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const detailPesanan = mysqlTable("detail_pesanan", {
+  id: int("id", { unsigned: true }).primaryKey().autoincrement(),
+  pesanan_id: int("pesanan_id", { unsigned: true }).notNull(),
+  barang_id: int("barang_id", { unsigned: true }),
+  nama_barang: varchar("nama_barang", { length: 150 }).notNull(),
+  satuan: varchar("satuan", { length: 20 }).notNull(),
+  jumlah: decimal("jumlah", { precision: 12, scale: 3 }).notNull(),
+  harga_rupiah: int("harga_rupiah", { unsigned: true }).notNull(),
+});
 
 export const lowongan = mysqlTable("lowongan", {
   id: int("id", { unsigned: true }).primaryKey().autoincrement(),

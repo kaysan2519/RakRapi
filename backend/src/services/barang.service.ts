@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import type { MySql2Database } from "drizzle-orm/mysql2";
 import { catalogDb } from "../config/db";
 import { barang, kategori } from "../config/schema";
@@ -74,7 +74,16 @@ export async function simpanBarang(
         if (fotoBaru) {
           perubahan.foto_key = fotoBaru.key;
         }
-        await db.update(barang).set(perubahan).where(eq(barang.id, idBarang));
+        // Edit harga/foto tidak boleh menimpa stok yang baru dikurangi oleh transaksi pesanan.
+        if (isian.stok === undefined) delete perubahan.stok;
+        const cekStokUntukSatuan = isian.satuan !== undefined && isian.stok === undefined;
+        const [hasil] = await db.update(barang).set(perubahan).where(and(
+          eq(barang.id, idBarang),
+          cekStokUntukSatuan ? eq(barang.stok, barangLama!.stok) : undefined,
+        ));
+        if (!hasil.affectedRows) {
+          throw new KesalahanKatalog(409, "Stok berubah. Muat ulang barang sebelum mengubah satuan.");
+        }
         idTersimpan = idBarang;
       } else {
         // Untuk barang baru, foto sudah diwajibkan sebelum validasi.

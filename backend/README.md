@@ -87,6 +87,18 @@ GRANT SELECT, INSERT (judul), UPDATE (aktif) ON rakrapi.lowongan TO 'rakrapi_kat
 | DELETE /barang/:id | Pemilik | Hapus barang beserta fotonya |
 | GET /lowongan | Pemilik, warga | Semua untuk pemilik, hanya yang aktif untuk warga |
 | POST /lowongan, PATCH /lowongan/:id/tutup | Pemilik | Buka lowongan dengan field `judul` atau tutup lowongan |
+| POST /pesanan | Warga | Kirim `kunci_kirim` (32 digit heksadesimal) dan `item` berisi `barang_id`, `jumlah`, dan `satuan` |
+| GET /pesanan, GET /pesanan/:id | Ketiga peran | Warga hanya melihat pesanan sendiri. Toko dapat melihat semua pesanan |
+| PATCH /pesanan/:id/konfirmasi | Pemilik, pegawai | Konfirmasi dan kurangi stok di satu transaksi. Konfirmasi ulang mengembalikan status terakhir |
+
+Untuk instalasi baru, terapkan `database/06_pesanan.sql` setelah migration 05. Akun katalog memakai hak berikut pada kedua tabel baru.
+
+```sql
+GRANT SELECT, INSERT, UPDATE (status) ON rakrapi.pesanan TO 'rakrapi_katalog'@'localhost';
+GRANT SELECT, INSERT ON rakrapi.detail_pesanan TO 'rakrapi_katalog'@'localhost';
+```
+
+Harga satuan, nama barang, dan satuan disalin ke rincian ketika pesanan dibuat. Subtotal dibulatkan ke rupiah terdekat per baris, lalu dijumlahkan. Saat konfirmasi, service mengunci baris pesanan dan barang dalam urutan ID. Kekurangan stok membatalkan transaksi dan API mengirim 409 beserta nama barang. Jalankan `node --env-file=.env test/akun.cjs --uji-pesanan` dari folder ini untuk menguji aturan itu di MySQL terpisah.
 
 Untuk menambah barang, kirim `multipart/form-data` dengan `nama`,
 `kategori_id`, `harga_rupiah`, `stok`, `satuan`, dan satu file pada kolom

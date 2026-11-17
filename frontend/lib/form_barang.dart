@@ -216,14 +216,26 @@ class _FormBarangState extends State<FormBarang> {
       pesan = null;
     });
     try {
-      final id = await widget.api.simpanBarang(
-        {
+      final lama = widget.barang;
+      final isian = {
+        if (lama == null || nama.text.trim() != lama['nama'])
           'nama': nama.text.trim(),
+        if (lama == null || kategoriId != lama['kategori_id'])
           'kategori_id': kategoriId.toString(),
+        if (lama == null ||
+            int.tryParse(harga.text.trim()) != lama['harga_rupiah'])
           'harga_rupiah': harga.text.trim(),
+        if (lama == null ||
+            stok.text.trim() != stokTampil(lama).split(' ').first)
           'stok': stok.text.trim(),
-          'satuan': satuan,
-        },
+        if (lama == null || satuan != lama['satuan']) 'satuan': satuan,
+      };
+      if (isian.isEmpty && fotoBaru == null) {
+        Navigator.pop(context, lama!['id']);
+        return;
+      }
+      final id = await widget.api.simpanBarang(
+        isian,
         id: widget.barang?['id'],
         gambar: fotoBaru,
       );

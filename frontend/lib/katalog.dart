@@ -6,6 +6,8 @@ import 'form_barang.dart';
 import 'form_akun.dart';
 import 'kategori.dart';
 import 'lowongan.dart';
+import 'keranjang.dart';
+import 'pesanan.dart';
 
 class PesanGagal extends StatelessWidget {
   const PesanGagal(this.pesan, {super.key, this.ulangi});
@@ -34,12 +36,14 @@ class DaftarBarang extends StatefulWidget {
     required this.api,
     required this.role,
     required this.keluar,
+    this.keranjang,
   });
   final RakRapiApi api;
   final String role;
   bool get pemilik => role == 'pemilik';
   bool get bolehMenulis => pemilik || role == 'pegawai';
   final VoidCallback keluar;
+  final Keranjang? keranjang;
   @override
   State<DaftarBarang> createState() => _DaftarBarangState();
 }
@@ -63,8 +67,12 @@ class _DaftarBarangState extends State<DaftarBarang> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            DetailBarang(api: widget.api, id: id, role: widget.role),
+        builder: (_) => DetailBarang(
+          api: widget.api,
+          id: id,
+          role: widget.role,
+          keranjang: widget.keranjang,
+        ),
       ),
     );
     if (mounted) muatUlang();
@@ -79,6 +87,38 @@ class _DaftarBarangState extends State<DaftarBarang> {
       ),
     );
     if (mounted && id != null) await bukaDetail(id);
+  }
+
+  Future<void> bukaKeranjang() async {
+    final id = await Navigator.push<int>(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            LayarKeranjang(api: widget.api, keranjang: widget.keranjang!),
+      ),
+    );
+    if (!mounted) return;
+    setState(() {});
+    if (id != null) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DetailPesanan(api: widget.api, id: id, toko: false),
+        ),
+      );
+    }
+    if (mounted) muatUlang();
+  }
+
+  Future<void> bukaPesanan() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            DaftarPesanan(api: widget.api, toko: widget.bolehMenulis),
+      ),
+    );
+    if (mounted) muatUlang();
   }
 
   Future<void> tambahKategori() async {
@@ -110,6 +150,24 @@ class _DaftarBarangState extends State<DaftarBarang> {
     appBar: AppBar(
       title: const Text('Daftar barang'),
       actions: [
+        IconButton(
+          tooltip: widget.bolehMenulis ? 'Pesanan masuk' : 'Pesanan saya',
+          onPressed: bukaPesanan,
+          icon: const Icon(Icons.receipt_long_outlined),
+        ),
+        if (widget.keranjang != null)
+          IconButton(
+            tooltip: 'Keranjang',
+            onPressed: bukaKeranjang,
+            icon: Semantics(
+              label: 'Keranjang, ${widget.keranjang!.item.length} jenis barang',
+              excludeSemantics: true,
+              child: Badge(
+                label: Text('${widget.keranjang!.item.length}'),
+                child: const Icon(Icons.shopping_cart_outlined),
+              ),
+            ),
+          ),
         if (widget.pemilik)
           PopupMenuButton<String>(
             tooltip: 'Menu pemilik',
@@ -209,8 +267,12 @@ class _DaftarBarangState extends State<DaftarBarang> {
                     itemBuilder: (_, i) {
                       final b = barang[i];
                       return ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                         leading: SizedBox.square(
-                          dimension: 48,
+                          dimension: 64,
                           child: FotoPrivat(
                             key: ObjectKey(b),
                             api: widget.api,
@@ -219,9 +281,19 @@ class _DaftarBarangState extends State<DaftarBarang> {
                           ),
                         ),
                         title: Text(b['nama']),
-                        subtitle: Text(
-                          '${hargaRupiah(b['harga_rupiah'])} · ${stokTampil(b)}',
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${hargaRupiah(b['harga_rupiah'])} / ${b['satuan']}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text('Stok ${stokTampil(b)}'),
+                          ],
                         ),
+                        isThreeLine: true,
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => bukaDetail(b['id']),
                       );
@@ -243,10 +315,12 @@ class DetailBarang extends StatefulWidget {
     required this.api,
     required this.id,
     required this.role,
+    this.keranjang,
   });
   final RakRapiApi api;
   final int id;
   final String role;
+  final Keranjang? keranjang;
   @override
   State<DetailBarang> createState() => _DetailBarangState();
 }
@@ -254,6 +328,33 @@ class DetailBarang extends StatefulWidget {
 class _DetailBarangState extends State<DetailBarang> {
   late Future<Json> detail;
   bool menghapus = false;
+  final jumlah = TextEditingController(text: '1');
+  final formJumlah = GlobalKey<FormState>();
+
+  @override
+  void dispose() {
+    jumlah.dispose();
+    super.dispose();
+  }
+
+  void tambahKeKeranjang(Json b) {
+    if (!formJumlah.currentState!.validate()) return;
+    final keranjang = widget.keranjang!;
+    final lama = keranjang.item[b['id']];
+    final satuanSama = lama?.barang['satuan'] == b['satuan'];
+    final total =
+        jumlahPerseribu(jumlah.text, b['satuan'])! +
+        (satuanSama ? lama!.jumlah : 0);
+    if (total > 999999999999) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Jumlah melebihi batas per barang.')),
+      );
+      return;
+    }
+    keranjang.atur(b, total);
+    Navigator.pop(context);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -363,6 +464,18 @@ class _DetailBarangState extends State<DetailBarang> {
               ],
             ),
             const Divider(),
+            if (widget.role == 'warga' && widget.keranjang != null) ...[
+              Form(
+                key: formJumlah,
+                child: IsianJumlah(controller: jumlah, satuan: b['satuan']),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: () => tambahKeKeranjang(b),
+                icon: const Icon(Icons.add_shopping_cart),
+                label: const Text('Tambah ke keranjang'),
+              ),
+            ],
             if (widget.role == 'pemilik' || widget.role == 'pegawai')
               FilledButton(
                 onPressed: menghapus ? null : () => ubah(b),

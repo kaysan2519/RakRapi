@@ -2,6 +2,16 @@
 
 RakRapi adalah katalog toko untuk Android. Ketiga peran masuk ke katalog. Pemilik mengelola kategori, pegawai, dan lowongan. Pemilik serta pegawai dapat menambah dan mengubah barang. Warga membaca katalog, melihat lowongan aktif, dan membuka tab Bansos.
 
+Warga dapat memesan beberapa barang dari katalog. Harga dicatat saat pesanan dikirim. Pemilik atau pegawai memeriksa pesanan masuk dan mengonfirmasi untuk mengurangi stok.
+
+### Mencoba pesanan di database uji
+
+1. Nyalakan Laragon dan Pixel 8. Dari folder `backend`, jalankan `npm.cmd run build`, kemudian `node --env-file=.env test/akun.cjs --demo-pesanan`. Runner membuat database terpisah, memeriksa transaksi, dan menyiapkan dua barang. Biarkan terminal ini terbuka.
+2. Dari folder `frontend`, jalankan kedua perintah yang dicetak runner untuk `adb reverse` dan `flutter run`. Port API uji dipilih saat runner dijalankan. Lokasi file berisi akun uji ditampilkan di terminal.
+3. Masuk sebagai warga. Buka minyak, tambahkan 2 botol. Buka beras, tambahkan 1,25 kg. Buka ikon keranjang, periksa Rp55.500, lalu pilih **Kirim pesanan**. Catat nomor yang muncul.
+4. Keluar dan masuk sebagai pegawai atau pemilik. Pilih ikon **Pesanan masuk** di atas katalog, buka nomor tadi, lalu tekan **Konfirmasi pesanan**. Masuk kembali sebagai warga dan buka **Pesanan saya**. Statusnya menjadi **Dikonfirmasi**.
+5. Selesaikan sesi Flutter, lalu tekan Enter pada terminal runner untuk membersihkan database dan foto uji. Untuk memakai katalog utama, jalankan kembali aplikasi mengikuti langkah di bawah.
+
 ## Menjalankan demo lokal
 
 1. Aktifkan MySQL 8.0.30 di Laragon. Pada laptop demo ini database `rakrapi` dan konfigurasi privat backend sudah tersedia.

@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'api.dart';
 import 'form_akun.dart';
 import 'katalog.dart';
+import 'keranjang.dart';
 import 'lowongan.dart';
 
 void main() => runApp(const RakRapi());
@@ -147,11 +148,17 @@ class BerandaWarga extends StatefulWidget {
 
 class _BerandaWargaState extends State<BerandaWarga> {
   int tab = 0;
+  final keranjang = Keranjang();
 
   @override
   Widget build(BuildContext context) => Scaffold(
     body: switch (tab) {
-      0 => DaftarBarang(api: widget.api, role: 'warga', keluar: widget.keluar),
+      0 => DaftarBarang(
+        api: widget.api,
+        role: 'warga',
+        keluar: widget.keluar,
+        keranjang: keranjang,
+      ),
       1 => LayarLowongan(api: widget.api, pemilik: false),
       _ => Scaffold(
         appBar: AppBar(title: const Text('Bansos')),

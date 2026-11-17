@@ -100,16 +100,20 @@ async function main() {
     admin(fs.readFileSync('database/03_role_warga.sql', 'utf8'), db);
     admin(fs.readFileSync('database/04_prosedur_pegawai.sql', 'utf8'), db);
     admin(fs.readFileSync('database/05_lowongan.sql', 'utf8'), db);
+    admin(fs.readFileSync('database/06_pesanan.sql', 'utf8'), db);
     assert.ok(snapshot() === sebelum, 'ID, role dan hash lama harus identik');
 
     const sandiPublik = akunMysql(publik);
     const sandiStaf = akunMysql(staf);
     const sandiKatalog = akunMysql(katalog);
     admin("GRANT SELECT (id,nama,email,password_hash,role), INSERT (nama,email,password_hash) ON " + db + ".users TO '" + publik + "'@'localhost';");
-    const demoManual = process.argv[2] === '--demo';
+    const demoPesanan = process.argv[2] === '--demo-pesanan';
+    const demoManual = demoPesanan || process.argv[2] === '--demo';
     const izinKatalog = 'SELECT, INSERT, UPDATE, DELETE';
     for (const tabel of ['kategori','barang']) admin("GRANT " + izinKatalog + " ON " + db + "." + tabel + " TO '" + katalog + "'@'localhost';");
     admin("GRANT SELECT, INSERT (judul), UPDATE (aktif) ON " + db + ".lowongan TO '" + katalog + "'@'localhost';");
+    admin("GRANT SELECT, INSERT, UPDATE (status) ON " + db + ".pesanan TO '" + katalog + "'@'localhost';");
+    admin("GRANT SELECT, INSERT ON " + db + ".detail_pesanan TO '" + katalog + "'@'localhost';");
     admin("GRANT EXECUTE ON PROCEDURE " + db + ".tambah_pegawai TO '" + staf + "'@'localhost';");
     const listener = net.createServer().listen(0, '127.0.0.1');
     await once(listener, 'listening');
@@ -172,6 +176,11 @@ async function main() {
     const hashBaru = admin("SELECT password_hash FROM users WHERE email='warga@rakrapi.test'", db);
     assert.ok(await bcrypt.compare(password, hashBaru));
     console.log('Lulus: register 201, duplikat 409, katalog warga GET 200 dan tulis 403, tambah pegawai 401/403/201. Lowongan pemilik 201/204, daftar warga 200 aktif lalu kosong, kelola oleh warga/pegawai 403.');
+    if (demoPesanan || process.argv[2] === '--uji-pesanan') {
+      await require('./pesanan.cjs').ujiPesanan({api,pemilik,pegawai,warga,password,sql: perintah => admin(perintah, db)});
+      console.log('Database pesanan uji: ' + db);
+      if (!demoPesanan) return;
+    }
     if (demoManual) {
       const panduan = path.join(folder, 'akun-demo.txt');
       fs.writeFileSync(panduan, [

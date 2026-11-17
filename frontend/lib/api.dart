@@ -148,6 +148,20 @@ class RakRapiApi {
   Future<List<Json>> lowongan() async =>
       ((await _json('GET', '/lowongan'))['data'] as List).cast<Json>();
 
+  Future<Json> kirimPesanan(String kunci, List<Json> item) async =>
+      (await _json(
+            'POST',
+            '/pesanan',
+            isi: {'kunci_kirim': kunci, 'item': item},
+          ))['data']
+          as Json;
+  Future<List<Json>> pesanan() async =>
+      ((await _json('GET', '/pesanan'))['data'] as List).cast<Json>();
+  Future<Json> detailPesanan(int id) async =>
+      (await _json('GET', '/pesanan/$id'))['data'] as Json;
+  Future<Json> konfirmasiPesanan(int id) async =>
+      (await _json('PATCH', '/pesanan/$id/konfirmasi'))['data'] as Json;
+
   Future<void> bukaLowongan(String judul) async {
     await _json('POST', '/lowongan', isi: {'judul': judul});
   }
@@ -188,7 +202,7 @@ class RakRapiApi {
   }
 }
 
-String hargaRupiah(int nilai) {
+String hargaRupiah(Object nilai) {
   final angka = nilai.toString().replaceAllMapped(
     RegExp(r'\B(?=(\d{3})+(?!\d))'),
     (_) => '.',
