@@ -8,6 +8,8 @@ import 'kategori.dart';
 import 'lowongan.dart';
 import 'keranjang.dart';
 import 'pesanan.dart';
+import 'theme/app_theme.dart';
+import 'widgets/keadaan_kosong.dart';
 
 class PesanGagal extends StatelessWidget {
   const PesanGagal(this.pesan, {super.key, this.ulangi});
@@ -50,6 +52,7 @@ class DaftarBarang extends StatefulWidget {
 
 class _DaftarBarangState extends State<DaftarBarang> {
   late Future<List<Json>> daftar;
+  int? kategoriTerpilih;
   @override
   void initState() {
     super.initState();
@@ -148,7 +151,22 @@ class _DaftarBarangState extends State<DaftarBarang> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Text('Daftar barang'),
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'TOKO SEMBAKO RAKRAPI',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
+          const Text(
+            'Katalog Barang',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
       actions: [
         IconButton(
           tooltip: widget.bolehMenulis ? 'Pesanan masuk' : 'Pesanan saya',
@@ -207,7 +225,11 @@ class _DaftarBarangState extends State<DaftarBarang> {
               ),
             ],
           ),
-        TextButton(onPressed: widget.keluar, child: const Text('Keluar')),
+        IconButton(
+          tooltip: 'Keluar',
+          onPressed: widget.keluar,
+          icon: const Icon(Icons.logout_outlined),
+        ),
       ],
     ),
     body: SafeArea(
@@ -248,62 +270,216 @@ class _DaftarBarangState extends State<DaftarBarang> {
                   );
                 }
                 final barang = hasil.requireData;
-                if (barang.isEmpty) {
-                  return const Center(child: Text('Belum ada barang.'));
-                }
+                // Warga belum boleh meminta endpoint pengelolaan kategori.
+                // Chip berasal dari kategori barang yang dikirim API katalog.
+                final kategori = <int, String>{
+                  for (final b in barang)
+                    b['kategori_id'] as int: b['nama_kategori'] as String,
+                };
+                final aktif = kategori.containsKey(kategoriTerpilih)
+                    ? kategoriTerpilih
+                    : null;
+                final terlihat = barang
+                    .where((b) => aktif == null || b['kategori_id'] == aktif)
+                    .toList();
                 return RefreshIndicator(
                   onRefresh: () async {
                     muatUlang();
                     try {
                       await daftar;
                     } on KesalahanApi {
-                      // FutureBuilder menampilkan pesan API dan tombol Coba lagi.
+                      // FutureBuilder menyediakan tombol Coba lagi.
                     }
                   },
-                  child: ListView.separated(
+                  child: ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
-                    itemCount: barang.length,
-                    separatorBuilder: (_, _) => const Divider(height: 1),
-                    itemBuilder: (_, i) {
-                      final b = barang[i];
-                      return ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(22),
+                        decoration: BoxDecoration(
+                          color: hijauUtama,
+                          borderRadius: BorderRadius.circular(24),
                         ),
-                        leading: SizedBox.square(
-                          dimension: 64,
-                          child: FotoPrivat(
-                            key: ObjectKey(b),
-                            api: widget.api,
-                            id: b['id'],
-                            mini: true,
-                          ),
-                        ),
-                        title: Text(b['nama']),
-                        subtitle: Column(
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '${hargaRupiah(b['harga_rupiah'])} / ${b['satuan']}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                              ),
+                              'Katalog Toko RakRapi',
+                              style: Theme.of(context).textTheme.titleLarge
+                                  ?.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                             ),
-                            Text('Stok ${stokTampil(b)}'),
+                            const SizedBox(height: 8),
+                            Text(
+                              '${barang.length} barang • ${kategori.length} kategori dalam katalog',
+                              style: const TextStyle(color: Color(0xFFDCE8DF)),
+                            ),
                           ],
                         ),
-                        isThreeLine: true,
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => bukaDetail(b['id']),
-                      );
-                    },
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        'Kategori',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 10),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            chipKategori(null, 'Semua', aktif),
+                            for (final k in kategori.entries)
+                              chipKategori(k.key, k.value, aktif),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      if (barang.isEmpty)
+                        const KeadaanKosong(
+                          ikon: Icons.inventory_2_outlined,
+                          judul: 'Belum ada barang.',
+                          penjelasan:
+                              'Barang yang ditambahkan oleh toko akan tampil di sini. Tarik ke bawah untuk memuat ulang.',
+                        )
+                      else
+                        LayoutBuilder(
+                          builder: (context, batas) {
+                            // Lebar kartu tetap nyaman pada HP maupun tablet.
+                            final kolom = batas.maxWidth < 300
+                                ? 1
+                                : (batas.maxWidth / 180).floor().clamp(2, 5);
+                            return GridView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: terlihat.length,
+                              gridDelegate:
+                                  SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: kolom,
+                                    crossAxisSpacing: 12,
+                                    mainAxisSpacing: 12,
+                                    mainAxisExtent:
+                                        300 +
+                                        (MediaQuery.textScalerOf(
+                                              context,
+                                            ).scale(40) -
+                                            40),
+                                  ),
+                              itemBuilder: (_, i) => kartuBarang(terlihat[i]),
+                            );
+                          },
+                        ),
+                    ],
                   ),
                 );
               },
             ),
           ),
         ],
+      ),
+    ),
+  );
+
+  Widget chipKategori(int? id, String nama, int? aktif) => Padding(
+    padding: const EdgeInsets.only(right: 8),
+    child: ChoiceChip(
+      label: Text(nama),
+      selected: aktif == id,
+      showCheckmark: false,
+      labelStyle: TextStyle(color: aktif == id ? Colors.white : hijauUtama),
+      onSelected: (_) => setState(() => kategoriTerpilih = id),
+    ),
+  );
+
+  Widget kartuBarang(Json barang) => Card(
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      onTap: () => bukaDetail(barang['id']),
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: latarAplikasi,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: FotoPrivat(
+                      key: ObjectKey(barang),
+                      api: widget.api,
+                      id: barang['id'],
+                    ),
+                  ),
+                  Positioned(
+                    left: 6,
+                    right: 6,
+                    bottom: 6,
+                    child: Align(
+                      alignment: Alignment.bottomLeft,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: hijauUtama,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          'Stok: ${stokTampil(barang)}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              barang['nama'],
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '/ ${barang['satuan']}',
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    hargaRupiah(barang['harga_rupiah']),
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+                IconButton.filled(
+                  tooltip: widget.role == 'warga'
+                      ? 'Pilih jumlah ${barang['nama']}'
+                      : 'Detail ${barang['nama']}',
+                  onPressed: () => bukaDetail(barang['id']),
+                  icon: Icon(
+                    widget.role == 'warga' ? Icons.add : Icons.arrow_forward,
+                    size: 19,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     ),
   );
@@ -437,33 +613,46 @@ class _DetailBarangState extends State<DetailBarang> {
         return ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            Text(
-              b['nama'],
-              style: teks.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: ColoredBox(
+                color: Colors.white,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: FotoPrivat(
+                    key: ObjectKey(b),
+                    api: widget.api,
+                    id: widget.id,
+                  ),
+                ),
+              ),
             ),
             const SizedBox(height: 18),
-            Row(
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Chip(
+                label: Text(b['nama_kategori']),
+                backgroundColor: hijauLembut,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              b['nama'],
+              style: teks.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 18),
+            Wrap(
+              spacing: 24,
+              runSpacing: 12,
               children: [
-                Expanded(
-                  child: ukuran('Harga', hargaRupiah(b['harga_rupiah'])),
+                ukuran(
+                  'Harga per ${b['satuan']}',
+                  hargaRupiah(b['harga_rupiah']),
                 ),
-                Expanded(child: ukuran('Stok', stokTampil(b))),
+                ukuran('Stok', stokTampil(b)),
               ],
             ),
-            const SizedBox(height: 20),
-            FotoPrivat(key: ObjectKey(b), api: widget.api, id: widget.id),
-            const SizedBox(height: 16),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Kategori'),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(b['nama_kategori'], textAlign: TextAlign.end),
-                ),
-              ],
-            ),
-            const Divider(),
+            const SizedBox(height: 28),
             if (widget.role == 'warga' && widget.keranjang != null) ...[
               Form(
                 key: formJumlah,
@@ -558,7 +747,7 @@ class _FotoPrivatState extends State<FotoPrivat> {
           borderRadius: BorderRadius.circular(8),
           child: Image.memory(
             hasil.requireData,
-            cacheWidth: widget.mini ? 128 : null,
+            cacheWidth: widget.mini ? 192 : 800,
             fit: BoxFit.contain,
             semanticLabel: 'Foto barang',
             errorBuilder: (_, _, _) => widget.mini

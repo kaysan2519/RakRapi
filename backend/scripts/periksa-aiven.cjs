@@ -1,5 +1,5 @@
 // Baca saja: tidak membuat database, mengubah tabel, atau mengisi katalog.
-// Jalankan dari backend setelah build, dengan file env privat Aiven.
+// Jalankan dari backend setelah build. Semua konfigurasi dibaca dari .env.
 const mysql = require('mysql2/promise');
 const { drizzle } = require('drizzle-orm/mysql2');
 const { sql } = require('drizzle-orm');
@@ -9,7 +9,10 @@ async function periksa() {
   if (process.env.DB_MODE !== 'aiven') {
     throw Error('Gunakan konfigurasi DB_MODE=aiven.');
   }
-  const opsi = opsiKoneksi(process.env.DB_USER, process.env.DB_PASSWORD);
+  const admin = process.argv.includes('--admin');
+  const user = admin ? process.env.ADMIN_DB_USER : process.env.DB_USER;
+  const password = admin ? process.env.ADMIN_DB_PASSWORD : process.env.DB_PASSWORD;
+  const opsi = opsiKoneksi(user, password);
   // Tetap bisa memeriksa layanan yang belum memiliki database rakrapi.
   delete opsi.database;
   const koneksi = await mysql.createConnection(opsi);

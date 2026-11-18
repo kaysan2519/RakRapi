@@ -48,3 +48,48 @@ Remove-Item Env:RAKRAPI_EMULATOR
 ```
 
 Kedua pengujian menyiapkan database sementara dan membersihkannya setelah selesai. Pada tes katalog, pegawai membaca ID 2 di API utama. Pemilik menambahkan barang di API uji, mengubah harga, memeriksa konfirmasi hapus kategori dan pesan kategori terpakai. Pilih foto uji kemudian tekan **Done** jika pemilih Android menampilkannya. Tes kembali masuk sebagai pegawai dan membaca hasil perubahan.
+
+## Membaca dan mengubah desain
+
+Acuan visual: papan RakRapi hijau tua/krem yang disetujui Kaysan. UI memakai
+Material 3 bawaan Flutter, `setState`, dan struktur layar lama. Paket tambahan
+hanya `google_fonts` 8.2.1 dari https://pub.dev/packages/google_fonts/versions/8.2.1.
+Versi ini cocok dengan SDK proyek; tidak menaikkan Flutter demi versi paket terbaru.
+Font Plus Jakarta Sans disertakan dalam `assets/fonts/` dengan lisensi OFL;
+`allowRuntimeFetching=false` mencegah permintaan font saat aplikasi dibuka.
+Tidak ada template e-commerce atau framework state management tambahan.
+
+| Bagian yang ingin diubah | File |
+| --- | --- |
+| Warna, font, tombol, isian, kartu | `lib/theme/app_theme.dart` |
+| Masuk, navigasi warga, informasi bansos | `lib/main.dart` |
+| Grid, filter kategori, detail, foto dari API | `lib/katalog.dart` |
+| Form barang dan unggah foto | `lib/form_barang.dart` |
+| Jumlah belanja dan kartu keranjang | `lib/keranjang.dart` |
+| Kartu pesanan dan status dari API | `lib/pesanan.dart` |
+| Lowongan yang disediakan API | `lib/lowongan.dart` |
+| Tampilan data kosong | `lib/widgets/keadaan_kosong.dart` |
+
+Kategori pada filter berasal dari `kategori_id` dan `nama_kategori` dalam
+respons daftar barang. Kategori yang belum memiliki barang tidak ditampilkan
+pada filter katalog. Harga, stok, dan foto tetap dibaca melalui `api.dart`.
+Tombol plus kartu membuka detail untuk memilih jumlah, termasuk pecahan kg.
+UI tidak menyimpan produk contoh atau menulis langsung ke MySQL.
+
+Hak akses tetap sama: warga belanja; pegawai tambah/ubah barang; pemilik juga
+hapus, kelola kategori, pegawai, dan lowongan. Bansos belum menerima pengajuan,
+lowongan belum menerima lamaran, dan status pesanan mengikuti respons API.
+Tidak ada tombol yang mengaku menjalankan fitur tersebut.
+
+`test/tampilan_test.dart` memakai fixture di memori tanpa MySQL untuk memeriksa
+filter, detail, keranjang, hak tombol, error login, data kosong dan layar sempit.
+Fixture ini tidak dipakai oleh aplikasi saat dijalankan. Untuk menghasilkan
+pratinjau dari widget asli, jalankan:
+
+```powershell
+flutter test --dart-define=SIMPAN_PRATINJAU=true
+```
+
+Gambar disimpan di `build/pratinjau/`. Gambar katalog-fixture adalah bukti tata
+letak pengujian, bukan bukti katalog Laragon/Aiven. Pengujian Pixel 8 dan
+koneksi database nyata harus dijalankan dari laptop yang memiliki aksesnya.

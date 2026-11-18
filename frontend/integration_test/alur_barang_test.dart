@@ -60,14 +60,14 @@ void main() {
         );
         await tester.enterText(find.byType(TextField).last, uji[role]);
         await tekan(find.text('Masuk'));
-        await tunggu(find.text('Daftar barang'));
+        await tunggu(find.text('Katalog Barang'));
       }
 
       final utama = RakRapiApi(alamat: 'http://127.0.0.1:3000/api');
       await tester.pumpWidget(RakRapi(api: utama));
       await tester.pumpAndSettle();
-      if (find.text('Keluar').evaluate().isNotEmpty) {
-        await tekan(find.text('Keluar'));
+      if (find.byTooltip('Keluar').evaluate().isNotEmpty) {
+        await tekan(find.byTooltip('Keluar'));
       }
       await masuk('pegawai');
       await tekan(find.text('Minyak goreng 1 L'));
@@ -93,7 +93,7 @@ void main() {
       await tester.pumpWidget(const SizedBox());
       await tester.pumpWidget(RakRapi(api: RakRapiApi(alamat: utama.alamat)));
       await tunggu(find.text('Minyak goreng 1 L'));
-      await tekan(find.text('Keluar'));
+      await tekan(find.byTooltip('Keluar'));
       await tunggu(find.text('Masuk'));
 
       final port = uji['portUji'] as int;
@@ -181,7 +181,7 @@ void main() {
       await tunggu(find.text('Kategori baru UI'));
       expect(find.text(uji['penanda']), findsNothing);
       await kembali();
-      await tekan(find.text('Keluar'));
+      await tekan(find.byTooltip('Keluar'));
       await masuk('pegawai');
       await tekan(find.text('Produk UI'));
       await tunggu(find.bySemanticsLabel('Foto barang'));

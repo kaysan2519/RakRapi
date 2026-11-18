@@ -6,8 +6,8 @@ database `rakrapi`.
 
 ```powershell
 npm.cmd ci
-npm.cmd run build
-npm.cmd start
+npm.cmd run dev
+# dev melakukan build lalu start; setelah mengedit backend, hentikan dan jalankan lagi.
 ```
 
 Di terminal kedua, jalankan `curl.exe -i http://127.0.0.1:3000/api/health`.
@@ -16,11 +16,32 @@ Status 200 berarti query melalui Drizzle mengembalikan nama database
 
 ## Mode Aiven dan DBeaver
 
-Laragon tetap memakai `.env` dan port API 3000. Mode Aiven memakai `.env.aiven`
-dan port API 3001. Keduanya menggunakan kode API yang sama. Salin
-`.env.aiven.example` ke `.env.aiven`, kemudian isi akun aplikasi secara privat.
-Jangan menyalin sandi ke README atau Git. Simpan CA layanan di
-`private/aiven/ca.pem`. Buat `JWT_SECRET` berbeda dari demo Laragon.
+Semua konfigurasi aktif sekarang berada di **`backend/.env`**. Template tunggal
+adalah `.env.example`; jangan menimpa `.env` milikmu dengan template kosong.
+`DB_MODE=laragon` menggunakan host lokal dan port 3306. Untuk Aiven, ubah
+`DB_MODE=aiven`, host dan port layanan, lalu isi `DB_SSL_CA=private/aiven/ca.pem`.
+API tetap memakai `PORT=3000`, sehingga alamat Flutter tidak perlu berubah.
+CA adalah berkas sertifikat, bukan file env tambahan.
+
+Akun health, auth, pegawai, dan katalog tetap berbeda karena hak aksesnya berbeda.
+Mengumpulkan variabel di satu file tidak menyatukan akun atau menambah izin.
+`ADMIN_DB_USER` dan `ADMIN_DB_PASSWORD` hanya dibaca pemeriksa Aiven dengan
+opsi `--admin`; server API tidak memakai kredensial admin.
+
+**Pindah dari konfigurasi lama (sekali, di laptop):**
+1. Simpan salinan privat konfigurasi lama sebelum merapikan. Jangan commit sandi.
+2. Pilih satu tujuan aktif. Untuk Laragon, pertahankan nilai `.env` yang sudah bekerja.
+   Untuk Aiven, pindahkan nilai koneksi dan keempat akun aplikasi dari `.env.aiven`
+   ke `.env`. Jangan membawa akun Laragon ke host Aiven.
+3. Dari `private/aiven/admin.env`, pindahkan nilai `DB_USER`/`DB_PASSWORD` ke
+   `ADMIN_DB_USER`/`ADMIN_DB_PASSWORD`. Jangan menimpa akun health dengan admin.
+4. Bila memakai tes demo, pindahkan `DEMO_PEMILIK_PASSWORD` dan
+   `DEMO_PEGAWAI_PASSWORD` dari `.env.demo` ke `.env`.
+5. Setelah koneksi dan fitur teruji, file env lama tidak lagi diperlukan oleh
+   perintah dalam repo. Jangan hapus sebelum nilai privatnya berhasil dipindahkan.
+
+Kredensial lokal tidak tersedia di checkout ini. Perubahan template **belum berarti**
+kredensial laptop sudah dipindahkan atau Aiven sudah tersambung.
 
 [koneksi.ts](src/config/koneksi.ts) menyusun opsi untuk semua pool MySQL.
 Mode Aiven wajib memakai host layanan, kredensial, dan CA. `rejectUnauthorized`
@@ -41,11 +62,12 @@ Pemeriksaan baca saja yang memakai koneksi dan CA yang sama:
 
 ```powershell
 npm.cmd run build
-node --env-file=private/aiven/admin.env scripts/periksa-aiven.cjs
+npm.cmd run cek:aiven
+# Opsional, untuk melihat tabel dengan akun administrator:
+npm.cmd run cek:aiven -- --admin
 ```
 
-File `private/aiven/admin.env` digunakan hanya untuk pemeriksaan/penyiapan,
-bukan menjalankan API. Script melaporkan host, port, hasil verifikasi TLS,
+Pemeriksaan ini hanya membaca data. Script melaporkan host, port, hasil verifikasi TLS,
 sidik sertifikat, server MySQL, daftar tabel, dan hasil `SELECT DATABASE()`
 melalui Drizzle bila `rakrapi` sudah ada. Script tidak menampilkan sandi
 dan tidak menerapkan migration. Jika ada tabel proyek lain, berhenti sebelum
@@ -61,16 +83,16 @@ menulis role, pegawai hanya EXECUTE prosedur `tambah_pegawai`, dan katalog
 memakai hak tabel yang didokumentasikan di bawah. Konfirmasikan penyiapan
 akun Aiven sebelum memberinya izin; jangan gunakan administrator sebagai akun API.
 
-Setelah skema, akun aplikasi, dan `.env.aiven` tersedia, jalankan:
+Setelah skema, akun aplikasi, dan `.env` tersedia, jalankan:
 
 ```powershell
-node --env-file=.env.aiven dist/index.js
+npm.cmd start
 ```
 
 Di terminal lain:
 
 ```powershell
-curl.exe -i http://127.0.0.1:3001/api/health
+curl.exe -i http://127.0.0.1:3000/api/health
 ```
 
 HTTP 200 saja belum membuktikan Aiven. Cocokkan dengan keluaran pemeriksaan
@@ -128,8 +150,7 @@ dan nol barang.
 Dari folder backend, jalankan `npm.cmd run build`, lalu `node --env-file=.env test/akun.cjs` untuk uji HTTP terisolasi. Tambahkan `emulator-5554` di akhir perintah untuk menguji formulir serta pemulihan sesi ketiga peran melalui Flutter. Runner menggunakan profil admin lokal MySQL `rakrapi` untuk membuat dan membersihkan database uji.
 
 Akun demo lokal: `pegawai.uji@rakrapi.test` dan `pemilik.uji@rakrapi.test`.
-Sandi demo ada di `.env.demo` pada komputer lokal. Git mengabaikan file itu
-dan `.env`.
+Sandi demo opsional disimpan pada bagian `DEMO_*` di `.env`. Git mengabaikan `.env`.
 
 ## Katalog dan foto lokal
 

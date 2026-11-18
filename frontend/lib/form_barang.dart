@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'api.dart';
 import 'katalog.dart' show FotoPrivat, PesanGagal;
+import 'theme/app_theme.dart';
 
 Future<Json?> dialogKategori(
   BuildContext context,
@@ -265,6 +266,31 @@ class _FormBarangState extends State<FormBarang> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  margin: const EdgeInsets.only(bottom: 24),
+                  decoration: BoxDecoration(
+                    color: hijauLembut,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.inventory_2_outlined, color: hijauUtama),
+                      const SizedBox(height: 10),
+                      Text(
+                        b == null
+                            ? 'Lengkapi informasi barang'
+                            : 'Perbarui informasi barang',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Harga berlaku per satuan. Pastikan stok dan foto sesuai dengan barang di toko.',
+                      ),
+                    ],
+                  ),
+                ),
                 TextFormField(
                   controller: nama,
                   enabled: !mengirim,
@@ -369,6 +395,12 @@ class _FormBarangState extends State<FormBarang> {
                   icon: const Icon(Icons.photo_outlined),
                   label: Text(
                     b != null || fotoBaru != null ? 'Ganti foto' : 'Pilih foto',
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 10),
+                  child: Text(
+                    'JPEG atau PNG • maksimal 5 MiB dan 16 megapiksel',
                   ),
                 ),
                 if (fotoBaru != null)

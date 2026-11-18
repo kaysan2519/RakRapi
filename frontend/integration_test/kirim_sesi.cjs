@@ -10,7 +10,7 @@ async function main() {
       portUji === 3000 || !/^QA-[a-f0-9]{16}$/.test(penanda ?? '')) {
     throw Error('Gunakan: node kirim_sesi.cjs ID_PERANGKAT PORT_UJI QA-16digitheksadesimal');
   }
-  process.loadEnvFile(path.join(__dirname, '../../backend/.env.demo'));
+  process.loadEnvFile(path.join(__dirname, '../../backend/.env'));
   const konfigurasi = {
     portUji, penanda,
     pegawai: process.env.DEMO_PEGAWAI_PASSWORD,

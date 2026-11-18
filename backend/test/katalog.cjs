@@ -10,6 +10,10 @@ const net = require("node:net");
 const { once } = require("node:events");
 const { setTimeout: wait } = require("node:timers/promises");
 
+if (process.env.DB_MODE === 'aiven') {
+  throw Error('Tes ini khusus Laragon. Gunakan konfigurasi lokal; jangan menjalankannya pada Aiven.');
+}
+
 const cli = process.env.MYSQL_CLI || "C:/laragon/bin/mysql/mysql-8.0.30-winx64/bin/mysql.exe";
 function admin(sql) {
   try {
@@ -82,7 +86,7 @@ test("katalog lokal melalui HTTP", async (t) => {
     for (const table of ["kategori", "barang"]) {
       admin("GRANT SELECT, INSERT, UPDATE, DELETE ON " + schema + "." + table + " TO '" + account + "'@'localhost';");
     }
-    process.loadEnvFile(".env.demo");
+    // Sandi demo sudah dimuat dari .env bersama konfigurasi backend.
     await start();
     await t.test("health utama dan login dua role", async () => {
       assert.deepEqual(await http("GET", "/health", 200), { status: "ok", nama_database: "rakrapi" });

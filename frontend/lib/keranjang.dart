@@ -2,6 +2,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'api.dart';
 import 'katalog.dart';
+import 'theme/app_theme.dart';
+import 'widgets/keadaan_kosong.dart';
 
 int? jumlahPerseribu(String input, String satuan) {
   final teks = input.trim().replaceAll(',', '.');
@@ -63,17 +65,45 @@ class IsianJumlah extends StatelessWidget {
   });
   final TextEditingController controller;
   final String satuan;
+  void langkah(int perubahan) {
+    final sekarang = jumlahPerseribu(controller.text, satuan);
+    if (sekarang == null) return;
+    final berikutnya = sekarang + perubahan;
+    if (berikutnya <= 0 || berikutnya > 999999999999) return;
+    controller.text = teksJumlah(berikutnya);
+  }
+
   @override
-  Widget build(BuildContext context) => TextFormField(
-    controller: controller,
-    keyboardType: TextInputType.numberWithOptions(decimal: satuan == 'kg'),
-    decoration: InputDecoration(labelText: 'Jumlah', suffixText: satuan),
-    validator: (teks) {
-      if (jumlahPerseribu(teks ?? '', satuan) != null) return null;
-      return satuan == 'botol'
-          ? 'Isi jumlah botol bulat lebih dari nol.'
-          : 'Isi kg lebih dari nol, maksimal tiga angka pecahan.';
-    },
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      IconButton(
+        tooltip: 'Kurangi jumlah',
+        onPressed: () => langkah(-1000),
+        icon: const Icon(Icons.remove),
+      ),
+      Expanded(
+        child: TextFormField(
+          controller: controller,
+          keyboardType: TextInputType.numberWithOptions(
+            decimal: satuan == 'kg',
+          ),
+          textAlign: TextAlign.center,
+          decoration: InputDecoration(labelText: 'Jumlah', suffixText: satuan),
+          validator: (teks) {
+            if (jumlahPerseribu(teks ?? '', satuan) != null) return null;
+            return satuan == 'botol'
+                ? 'Isi jumlah botol bulat lebih dari nol.'
+                : 'Isi kg lebih dari nol, maksimal tiga angka pecahan.';
+          },
+        ),
+      ),
+      IconButton(
+        tooltip: 'Tambah jumlah',
+        onPressed: () => langkah(1000),
+        icon: const Icon(Icons.add),
+      ),
+    ],
   );
 }
 
@@ -135,54 +165,109 @@ class _LayarKeranjangState extends State<LayarKeranjang> {
       child: Scaffold(
         appBar: AppBar(title: const Text('Keranjang')),
         body: item.isEmpty
-            ? const Center(child: Text('Keranjang masih kosong.'))
+            ? const Center(
+                child: KeadaanKosong(
+                  ikon: Icons.shopping_bag_outlined,
+                  judul: 'Keranjang masih kosong.',
+                  penjelasan:
+                      'Pilih barang dari katalog untuk mulai berbelanja.',
+                ),
+              )
             : ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
                   for (final i in item)
                     Padding(
+                      key: ValueKey(i.barang['id']),
                       padding: const EdgeInsets.only(bottom: 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            i.barang['nama'],
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          Text(
-                            '${teksJumlah(i.jumlah)} ${i.barang['satuan']} × ${hargaRupiah(i.barang['harga_rupiah'])}',
-                          ),
-                          Row(
+                      child: Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Expanded(
-                                child: Text(
-                                  'Subtotal ${hargaRupiah(i.subtotal)}',
-                                ),
-                              ),
-                              IconButton(
-                                tooltip: 'Ubah jumlah ${i.barang['nama']}',
-                                onPressed: mengirim ? null : () => ubah(i),
-                                icon: const Icon(Icons.edit_outlined),
-                              ),
-                              IconButton(
-                                tooltip: 'Hapus ${i.barang['nama']}',
-                                onPressed: mengirim
-                                    ? null
-                                    : () => setState(
-                                        () =>
-                                            widget.keranjang.atur(i.barang, 0),
+                              Row(
+                                children: [
+                                  SizedBox(
+                                    width: 64,
+                                    height: 70,
+                                    child: FotoPrivat(
+                                      api: widget.api,
+                                      id: i.barang['id'],
+                                      mini: true,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      i.barang['nama'],
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
                                       ),
-                                icon: const Icon(Icons.delete_outline),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                hargaRupiah(i.barang['harga_rupiah']),
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              Text(
+                                '${teksJumlah(i.jumlah)} ${i.barang['satuan']} × ${hargaRupiah(i.barang['harga_rupiah'])}',
+                              ),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'Subtotal ${hargaRupiah(i.subtotal)}',
+                                    ),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Ubah jumlah ${i.barang['nama']}',
+                                    onPressed: mengirim ? null : () => ubah(i),
+                                    icon: const Icon(Icons.edit_outlined),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Hapus ${i.barang['nama']}',
+                                    onPressed: mengirim
+                                        ? null
+                                        : () => setState(
+                                            () => widget.keranjang.atur(
+                                              i.barang,
+                                              0,
+                                            ),
+                                          ),
+                                    icon: const Icon(Icons.delete_outline),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
-                          const Divider(),
-                        ],
+                        ),
                       ),
                     ),
-                  Text(
-                    'Total ${hargaRupiah(total)}',
-                    style: Theme.of(context).textTheme.titleLarge,
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: hijauLembut,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Wrap(
+                      spacing: 20,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.spaceBetween,
+                      children: [
+                        const Text('Total belanja'),
+                        Text(
+                          hargaRupiah(total),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 20,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   if (pesan != null) PesanGagal(pesan!),
                   const SizedBox(height: 16),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'api.dart';
 import 'katalog.dart';
+import 'theme/app_theme.dart';
+import 'widgets/keadaan_kosong.dart';
 
 class DaftarPesanan extends StatefulWidget {
   const DaftarPesanan({super.key, required this.api, required this.toko});
@@ -53,24 +55,78 @@ class _DaftarPesananState extends State<DaftarPesanan> {
           return const Center(child: CircularProgressIndicator());
         }
         if (hasil.requireData.isEmpty) {
-          return const Center(child: Text('Belum ada pesanan.'));
+          return const Center(
+            child: KeadaanKosong(
+              ikon: Icons.receipt_long_outlined,
+              judul: 'Belum ada pesanan.',
+              penjelasan:
+                  'Pesanan yang dikirim melalui keranjang akan muncul di sini.',
+            ),
+          );
         }
         return ListView.separated(
+          padding: const EdgeInsets.all(16),
           itemCount: hasil.requireData.length,
-          separatorBuilder: (_, _) => const Divider(height: 1),
+          separatorBuilder: (_, _) => const SizedBox(height: 12),
           itemBuilder: (_, i) {
             final p = hasil.requireData[i];
-            return ListTile(
-              title: Text('Pesanan #${p['id']}'),
-              subtitle: Text(
-                [
-                  if (widget.toko) p['nama_pemesan'],
-                  p['status'],
-                  hargaRupiah(p['total_rupiah']),
-                ].join(' · '),
+            return Card(
+              child: InkWell(
+                borderRadius: BorderRadius.circular(20),
+                onTap: () => buka(p['id']),
+                child: Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 8,
+                        children: [
+                          Text(
+                            'Pesanan #${p['id']}',
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: p['status'] == 'Dikonfirmasi'
+                                  ? hijauLembut
+                                  : const Color(0xFFFFF0D2),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              p['status'],
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (widget.toko) ...[
+                        const SizedBox(height: 8),
+                        Text(p['nama_pemesan']),
+                      ],
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              hargaRupiah(p['total_rupiah']),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => buka(p['id']),
             );
           },
         );

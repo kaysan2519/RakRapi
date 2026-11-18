@@ -6,6 +6,8 @@ import 'form_akun.dart';
 import 'katalog.dart';
 import 'keranjang.dart';
 import 'lowongan.dart';
+import 'theme/app_theme.dart';
+import 'widgets/keadaan_kosong.dart';
 
 void main() => runApp(const RakRapi());
 
@@ -67,13 +69,6 @@ class _RakRapiState extends State<RakRapi> {
 
   @override
   Widget build(BuildContext context) {
-    final tema = ThemeData(
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: const Color(0xff216240),
-        primary: const Color(0xff205c3a),
-      ),
-      useMaterial3: true,
-    );
     Widget layar;
     if (memuat) {
       layar = const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -120,12 +115,7 @@ class _RakRapiState extends State<RakRapi> {
       title: 'RakRapi',
       debugShowCheckedModeBanner: false,
       navigatorKey: navigasi,
-      theme: tema.copyWith(
-        scaffoldBackgroundColor: Colors.white,
-        inputDecorationTheme: const InputDecorationTheme(
-          border: OutlineInputBorder(),
-        ),
-      ),
+      theme: temaRakRapi(),
       home: layar,
     );
   }
@@ -161,11 +151,16 @@ class _BerandaWargaState extends State<BerandaWarga> {
       ),
       1 => LayarLowongan(api: widget.api, pemilik: false),
       _ => Scaffold(
-        appBar: AppBar(title: const Text('Bansos')),
+        appBar: AppBar(title: const Text('Bantuan sosial')),
         body: SafeArea(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
-            child: Text('Selamat datang, ${widget.nama}.'),
+            child: KeadaanKosong(
+              ikon: Icons.volunteer_activism_outlined,
+              judul: 'Layanan bansos sedang disiapkan',
+              penjelasan:
+                  'Halo, ${widget.nama}. Pengajuan dan riwayat bantuan belum tersedia. Kamu tetap bisa berbelanja melalui Katalog.',
+            ),
           ),
         ),
       ),
@@ -200,6 +195,7 @@ class _LayarMasukState extends State<LayarMasuk> {
   final email = TextEditingController();
   final sandi = TextEditingController();
   bool sibuk = false;
+  bool sembunyikanSandi = true;
   String? pesan;
   @override
   void dispose() {
@@ -254,26 +250,60 @@ class _LayarMasukState extends State<LayarMasuk> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                const Icon(
+                  Icons.storefront_outlined,
+                  size: 56,
+                  color: hijauUtama,
+                ),
+                const SizedBox(height: 8),
                 Text(
                   'RakRapi',
+                  textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+                const SizedBox(height: 48),
+                Text(
+                  'Masuk ke Akun',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text('Kelola toko, belanja, dan akses layanan RakRapi.'),
                 const SizedBox(height: 28),
                 TextField(
                   controller: email,
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(labelText: 'Email'),
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    prefixIcon: Icon(Icons.mail_outline),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: sandi,
-                  obscureText: true,
+                  obscureText: sembunyikanSandi,
                   autocorrect: false,
                   onSubmitted: (_) => kirim(),
-                  decoration: const InputDecoration(labelText: 'Sandi'),
+                  decoration: InputDecoration(
+                    labelText: 'Sandi',
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      tooltip: sembunyikanSandi
+                          ? 'Tampilkan sandi'
+                          : 'Sembunyikan sandi',
+                      onPressed: () =>
+                          setState(() => sembunyikanSandi = !sembunyikanSandi),
+                      icon: Icon(
+                        sembunyikanSandi
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                      ),
+                    ),
+                  ),
                 ),
                 if (pesan != null) PesanGagal(pesan!),
                 const SizedBox(height: 20),
@@ -281,6 +311,8 @@ class _LayarMasukState extends State<LayarMasuk> {
                   onPressed: sibuk ? null : kirim,
                   child: Text(sibuk ? 'Memeriksa…' : 'Masuk'),
                 ),
+                const SizedBox(height: 16),
+                const Text('Belum punya akun?', textAlign: TextAlign.center),
                 TextButton(
                   onPressed: sibuk ? null : daftar,
                   child: const Text('Daftar sebagai warga'),

@@ -11,6 +11,10 @@ const { setTimeout: tunggu } = require('node:timers/promises');
 const readline = require('node:readline');
 const bcrypt = require('bcryptjs');
 
+if (process.env.DB_MODE === 'aiven') {
+  throw Error('Tes ini khusus Laragon. Gunakan konfigurasi lokal; jangan menjalankannya pada Aiven.');
+}
+
 const cli = process.env.MYSQL_CLI || 'C:/laragon/bin/mysql/mysql-8.0.30-winx64/bin/mysql.exe';
 const tag = randomBytes(8).toString('hex');
 const db = 'rakrapi_uji_akun_' + tag;

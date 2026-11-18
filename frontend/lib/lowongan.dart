@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'api.dart';
 import 'katalog.dart';
+import 'theme/app_theme.dart';
+import 'widgets/keadaan_kosong.dart';
 
 class LayarLowongan extends StatefulWidget {
   const LayarLowongan({super.key, required this.api, required this.pemilik});
@@ -79,6 +81,17 @@ class _LayarLowonganState extends State<LayarLowongan> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (!widget.pemilik) ...[
+            const Text(
+              'Temukan kesempatan di toko RakRapi.',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Hanya lowongan yang masih dibuka oleh pemilik yang ditampilkan.',
+            ),
+            const SizedBox(height: 24),
+          ],
           if (widget.pemilik) ...[
             TextField(
               controller: judul,
@@ -104,28 +117,41 @@ class _LayarLowonganState extends State<LayarLowongan> {
               }
               final lowongan = hasil.requireData;
               if (lowongan.isEmpty) {
-                return Text(
-                  widget.pemilik
+                return KeadaanKosong(
+                  ikon: Icons.work_outline,
+                  judul: widget.pemilik
                       ? 'Belum ada lowongan.'
                       : 'Belum ada lowongan aktif.',
+                  penjelasan:
+                      'Daftar ini diperbarui dari toko. Gunakan tombol muat ulang untuk memeriksa kembali.',
                 );
               }
               return Column(
                 children: [
                   for (final l in lowongan)
-                    ListTile(
-                      title: Text(l['judul']),
-                      subtitle: widget.pemilik
-                          ? Text(l['aktif'] ? 'Aktif' : 'Ditutup')
-                          : null,
-                      trailing: widget.pemilik && l['aktif'] == true
-                          ? TextButton(
-                              onPressed: menyimpan
-                                  ? null
-                                  : () => simpan(idUntukDitutup: l['id']),
-                              child: const Text('Tutup'),
-                            )
-                          : null,
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Card(
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.all(16),
+                          leading: const CircleAvatar(
+                            backgroundColor: hijauLembut,
+                            child: Icon(Icons.work_outline, color: hijauUtama),
+                          ),
+                          title: Text(l['judul']),
+                          subtitle: widget.pemilik
+                              ? Text(l['aktif'] ? 'Aktif' : 'Ditutup')
+                              : null,
+                          trailing: widget.pemilik && l['aktif'] == true
+                              ? TextButton(
+                                  onPressed: menyimpan
+                                      ? null
+                                      : () => simpan(idUntukDitutup: l['id']),
+                                  child: const Text('Tutup'),
+                                )
+                              : null,
+                        ),
+                      ),
                     ),
                 ],
               );

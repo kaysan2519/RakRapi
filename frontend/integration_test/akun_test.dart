@@ -86,25 +86,25 @@ void main() {
       }
 
       await bukaLagi();
-      if (find.text('Keluar').evaluate().isNotEmpty) {
-        await tekan(find.text('Keluar'));
+      if (find.byTooltip('Keluar').evaluate().isNotEmpty) {
+        await tekan(find.byTooltip('Keluar'));
       }
       await tekan(find.text('Daftar sebagai warga'));
       await isiForm('Warga emulator', 'warga.emulator@rakrapi.test');
       await masuk(
         'warga.emulator@rakrapi.test',
         data['sandiBaru'],
-        'Daftar barang',
+        'Katalog Barang',
       );
       await tunggu(find.text('Katalog'));
       expect(find.text('Tambah barang'), findsNothing);
       await tekan(find.text('Bansos'));
-      await tunggu(find.text('Selamat datang, Warga emulator.'));
+      await tunggu(find.text('Layanan bansos sedang disiapkan'));
       await bukaLagi();
-      await tunggu(find.text('Daftar barang'));
-      await tekan(find.text('Keluar'));
+      await tunggu(find.text('Katalog Barang'));
+      await tekan(find.byTooltip('Keluar'));
 
-      await masuk(emailPemilik, data['password'], 'Daftar barang');
+      await masuk(emailPemilik, data['password'], 'Katalog Barang');
       await bukaLagi();
       await tekan(find.byTooltip('Menu pemilik'));
       await tekan(find.text('Tambah pegawai'));
@@ -121,15 +121,15 @@ void main() {
       await tester.pumpAndSettle();
       final apiPemilik = RakRapiApi(alamat: url)..token = cek['token'];
       await apiPemilik.tambahKategori('Sembako uji');
-      await tekan(find.text('Keluar'));
+      await tekan(find.byTooltip('Keluar'));
 
       await masuk(
         'pegawai.emulator@rakrapi.test',
         data['sandiBaru'],
-        'Daftar barang',
+        'Katalog Barang',
       );
       await bukaLagi();
-      await tunggu(find.text('Daftar barang'));
+      await tunggu(find.text('Katalog Barang'));
       expect(find.byTooltip('Menu pemilik'), findsNothing);
       await tekan(find.text('Tambah barang'));
       expect(find.text('Tambah kategori'), findsNothing);
@@ -190,17 +190,17 @@ void main() {
       expect(await apiPemilik.foto(barang['id']), orderedEquals(gambar));
       await tester.pageBack();
       await tester.pumpAndSettle();
-      await tekan(find.text('Keluar'));
+      await tekan(find.byTooltip('Keluar'));
       await masuk(
         'warga.emulator@rakrapi.test',
         data['sandiBaru'],
-        'Daftar barang',
+        'Katalog Barang',
       );
       await tekan(find.text('Lowongan'));
       await tunggu(find.text('Penjaga toko uji'));
       await tekan(find.text('Katalog'));
-      await tekan(find.text('Keluar'));
-      await masuk(emailPemilik, data['password'], 'Daftar barang');
+      await tekan(find.byTooltip('Keluar'));
+      await masuk(emailPemilik, data['password'], 'Katalog Barang');
       await tekan(find.byTooltip('Menu pemilik'));
       await tekan(find.text('Kelola lowongan'));
       await tekan(find.text('Tutup'));
@@ -212,11 +212,11 @@ void main() {
       );
       await tester.pageBack();
       await tester.pumpAndSettle();
-      await tekan(find.text('Keluar'));
+      await tekan(find.byTooltip('Keluar'));
       await masuk(
         'warga.emulator@rakrapi.test',
         data['sandiBaru'],
-        'Daftar barang',
+        'Katalog Barang',
       );
       await tekan(find.text('Lowongan'));
       await tekan(find.byTooltip('Muat ulang'));
@@ -233,7 +233,7 @@ void main() {
       await tunggu(find.text('Belum ada lowongan aktif.'));
       expect(find.text('Kurir uji'), findsNothing);
       await tekan(find.text('Katalog'));
-      await tekan(find.text('Keluar'));
+      await tekan(find.byTooltip('Keluar'));
       await tunggu(find.text('Masuk'));
     },
     timeout: const Timeout(Duration(minutes: 8)),
