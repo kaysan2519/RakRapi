@@ -40,8 +40,11 @@ opsi `--admin`; server API tidak memakai kredensial admin.
 5. Setelah koneksi dan fitur teruji, file env lama tidak lagi diperlukan oleh
    perintah dalam repo. Jangan hapus sebelum nilai privatnya berhasil dipindahkan.
 
-Kredensial lokal tidak tersedia di checkout ini. Perubahan template **belum berarti**
-kredensial laptop sudah dipindahkan atau Aiven sudah tersambung.
+Pada laptop ini, konfigurasi Laragon dan sandi demo sudah disatukan di `.env`
+pada 18 November 2026. Nilai koneksi, sandi, dan JWT yang sebelumnya bekerja
+dipertahankan; salinan privat konfigurasi lama masih disimpan di `private/`.
+Mode aktif tetap `laragon`. Kredensial Aiven belum lengkap, sehingga penyatuan
+file ini **belum berarti** Aiven sudah tersambung.
 
 [koneksi.ts](src/config/koneksi.ts) menyusun opsi untuk semua pool MySQL.
 Mode Aiven wajib memakai host layanan, kredensial, dan CA. `rejectUnauthorized`

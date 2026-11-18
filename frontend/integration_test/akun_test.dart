@@ -47,9 +47,25 @@ void main() {
         expect(f, findsWidgets);
       }
 
-      Future<void> tekan(Finder f) async {
+      Future<void> tekan(Finder f, {bool gulir = false}) async {
+        // Form panjang perlu keyboard ditutup dan digulir seperti saat dipakai pengguna.
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.pumpAndSettle();
+        if (gulir) {
+          await tester.scrollUntilVisible(
+            f,
+            250,
+            scrollable: find
+                .descendant(
+                  of: find.byType(ListView),
+                  matching: find.byType(Scrollable),
+                )
+                .first,
+          );
+        }
         await tunggu(f);
         await tester.ensureVisible(f.first);
+        await tester.pumpAndSettle();
         await tester.tap(f.first);
         await tester.pumpAndSettle();
       }
@@ -63,6 +79,13 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
+      }
+
+      Future<void> simpanBukti(String nama) async {
+        if (data['bukti'] != true) return;
+        await tester.pumpAndSettle();
+        final bytes = await binding.takeScreenshot(nama);
+        await File('${file.path}-$nama.png').writeAsBytes(bytes, flush: true);
       }
 
       Future<void> masuk(String email, String sandi, String halaman) async {
@@ -174,7 +197,7 @@ void main() {
         final bytes = await binding.takeScreenshot('form-pegawai');
         await File('${file.path}.png').writeAsBytes(bytes, flush: true);
       }
-      await tekan(find.text('Simpan'));
+      await tekan(find.text('Simpan'), gulir: true);
       await tunggu(find.text('Detail barang'));
       await tunggu(find.bySemanticsLabel('Foto barang'));
       expect(find.text('Hapus barang'), findsNothing);
@@ -183,7 +206,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Harga per satuan'),
         '26000',
       );
-      await tekan(find.text('Simpan'));
+      await tekan(find.text('Simpan'), gulir: true);
       await tunggu(find.text('Rp26.000'));
       final barang = (await apiPemilik.daftarBarang()).single;
       expect(barang['harga_rupiah'], 26000);
@@ -195,6 +218,54 @@ void main() {
         'warga.emulator@rakrapi.test',
         data['sandiBaru'],
         'Katalog Barang',
+      );
+      await tunggu(find.text('Beras uji'));
+      await simpanBukti('katalog-warga');
+      await tekan(find.text('Beras uji'));
+      await tunggu(find.bySemanticsLabel('Foto barang'));
+      await tester.enterText(find.byType(TextFormField), '2,125');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tekan(find.text('Tambah ke keranjang'), gulir: true);
+      await tunggu(find.text('Katalog Barang'));
+      await tekan(find.byTooltip('Keranjang'));
+      await tunggu(find.text('Rp55.250'));
+      await simpanBukti('keranjang-warga');
+      await tekan(find.text('Kirim pesanan'));
+      await tunggu(find.text('Menunggu konfirmasi'));
+      final pesanan = (await apiPemilik.pesanan()).single;
+      expect(pesanan['total_rupiah'].toString(), '55250');
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tekan(find.byTooltip('Keluar'));
+      await masuk(
+        'pegawai.emulator@rakrapi.test',
+        data['sandiBaru'],
+        'Katalog Barang',
+      );
+      await tekan(find.byTooltip('Pesanan masuk'));
+      await tunggu(find.text('Pesanan #${pesanan['id']}'));
+      await simpanBukti('pesanan-masuk');
+      await tekan(find.text('Pesanan #${pesanan['id']}'));
+      await tekan(find.text('Konfirmasi pesanan'));
+      await tunggu(find.text('Dikonfirmasi'));
+      expect((await apiPemilik.detail(barang['id']))['stok'], '5.875');
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tekan(find.byTooltip('Keluar'));
+      await masuk(
+        'warga.emulator@rakrapi.test',
+        data['sandiBaru'],
+        'Katalog Barang',
+      );
+      await bukaLagi();
+      await tekan(find.byTooltip('Pesanan saya'));
+      await tunggu(find.text('Dikonfirmasi'));
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      debugPrint(
+        'UI pesanan: Rp55.250, dikonfirmasi pegawai, stok uji 8 menjadi 5.875 kg.',
       );
       await tekan(find.text('Lowongan'));
       await tunggu(find.text('Penjaga toko uji'));
@@ -235,6 +306,42 @@ void main() {
       await tekan(find.text('Katalog'));
       await tekan(find.byTooltip('Keluar'));
       await tunggu(find.text('Masuk'));
+
+      // Akun utama hanya untuk baca. Seluruh percobaan tulis di atas memakai API uji.
+      if (data['pegawaiUtama'] != null) {
+        final utama = RakRapiApi(alamat: 'http://127.0.0.1:3000/api');
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpWidget(RakRapi(key: UniqueKey(), api: utama));
+        await masuk(
+          'pegawai.uji@rakrapi.test',
+          data['pegawaiUtama'],
+          'Katalog Barang',
+        );
+        await tekan(find.text('Minyak goreng 1 L'));
+        await tunggu(find.bySemanticsLabel('Foto barang'));
+        expect(find.text('Rp19.000'), findsOneWidget);
+        expect(find.text('12 botol'), findsOneWidget);
+        expect(find.text('Minyak Goreng'), findsOneWidget);
+        await simpanBukti('detail-id2-laragon');
+        debugPrint(
+          'UI Laragon utama: ID 2, Rp19.000, 12 botol dan foto privat tampil.',
+        );
+      }
+      if (data['bukti'] == true) {
+        // Tunggu runner menyalin PNG sebelum Flutter melepas APK uji.
+        await File('${file.path}.bukti-siap').writeAsString('');
+        final tersalin = File('${file.path}.bukti-selesai');
+        final batasSalin = DateTime.now().add(const Duration(seconds: 45));
+        while (!await tersalin.exists() &&
+            DateTime.now().isBefore(batasSalin)) {
+          await Future<void>.delayed(const Duration(milliseconds: 250));
+        }
+        expect(
+          await tersalin.exists(),
+          isTrue,
+          reason: 'Screenshot tersalin ke laptop',
+        );
+      }
     },
     timeout: const Timeout(Duration(minutes: 8)),
   );

@@ -55,19 +55,33 @@ async function ujiAndroid(device, port, password) {
       if (run(['shell', 'if run-as ' + paket + ' test -f ' + target + '.siap 2>/dev/null; then echo siap; fi']).trim() === 'siap') {
         // Hanya APK debug uji dapat membaca file privat ini.
         run(['shell', "run-as " + paket + " sh -c 'cat > " + target + ".tmp && mv " + target + ".tmp " + target + "'"],
-          JSON.stringify({ port, emailPemilik, password, sandiBaru: sandi(), bukti }));
+          JSON.stringify({ port, emailPemilik, password, sandiBaru: sandi(), bukti,
+            pegawaiUtama: process.env.DEMO_PEGAWAI_PASSWORD }));
         break;
       }
       await tunggu(1000);
     }
     if (bukti) {
+      // Flutter melepas APK uji saat selesai, jadi salin bukti sebelum tes ditutup.
+      const daftarBukti = [
+        [target + '.png', 'form-pegawai-pixel8'],
+        ...['katalog-warga', 'keranjang-warga', 'pesanan-masuk']
+          .map(nama => [target + '-' + nama + '.png', nama]),
+      ];
+      if (process.env.DEMO_PEGAWAI_PASSWORD) {
+        daftarBukti.push([target + '-detail-id2-laragon.png', 'detail-id2-laragon']);
+      }
       for (let i = 0; i < 480 && flutter.exitCode === null; i++) {
-        if (run(['shell', 'if run-as ' + paket + ' test -s ' + target + '.png 2>/dev/null; then echo siap; fi']).trim() === 'siap') {
-          const gambar = execFileSync(adb, ['-s',device,'exec-out','run-as',paket,'cat',target + '.png'], {windowsHide:true,maxBuffer:16*1024*1024});
-          assert.equal(gambar.subarray(1,4).toString(),'PNG');
-          const folder = path.resolve('../docs/bukti');
+        if (run(['shell', 'if run-as ' + paket + ' test -f ' + target + '.bukti-siap 2>/dev/null; then echo siap; fi']).trim() === 'siap') {
+          const folder = path.resolve(process.env.RAKRAPI_BUKTI_DIR || '../docs/bukti');
           fs.mkdirSync(folder,{recursive:true});
-          fs.writeFileSync(path.join(folder,'form-pegawai-pixel8.png'),gambar);
+          for (const [sumber, nama] of daftarBukti) {
+            const gambar = execFileSync(adb, ['-s', device, 'exec-out', 'run-as', paket,
+              'cat', sumber], { windowsHide: true, maxBuffer: 16 * 1024 * 1024 });
+            assert.equal(gambar.subarray(1, 4).toString(), 'PNG');
+            fs.writeFileSync(path.join(folder, nama + '.png'), gambar);
+          }
+          run(['shell', 'run-as', paket, 'touch', target + '.bukti-selesai']);
           break;
         }
         await tunggu(700);
