@@ -9,7 +9,9 @@ import { barang } from "../config/schema";
 import { KesalahanKatalog } from "../middleware/error.middleware";
 import { periksaFoto } from "../validations/foto.validation";
 
-const root = path.resolve(process.env.UPLOAD_DIR || path.join(__dirname, "../../private/uploads"));
+// Nama database sama, tetapi file Aiven tidak boleh bercampur dengan katalog Laragon.
+const folderLingkungan = process.env.DB_MODE === "aiven" ? "uploads-aiven" : "uploads";
+const root = path.resolve(process.env.UPLOAD_DIR || path.join(__dirname, "../../private", folderLingkungan));
 const namaDB = process.env.CATALOG_DB_NAME ?? process.env.DB_NAME ?? "rakrapi";
 const folder = path.join(root, "db-" + encodeURIComponent(namaDB));
 // Nama file buatan backend: UUID versi 4 dengan ekstensi .jpg atau .png.

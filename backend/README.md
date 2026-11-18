@@ -14,6 +14,72 @@ Di terminal kedua, jalankan `curl.exe -i http://127.0.0.1:3000/api/health`.
 Status 200 berarti query melalui Drizzle mengembalikan nama database
 `rakrapi`. Jika koneksi gagal atau nama database berbeda, statusnya 503.
 
+## Mode Aiven dan DBeaver
+
+Laragon tetap memakai `.env` dan port API 3000. Mode Aiven memakai `.env.aiven`
+dan port API 3001. Keduanya menggunakan kode API yang sama. Salin
+`.env.aiven.example` ke `.env.aiven`, kemudian isi akun aplikasi secara privat.
+Jangan menyalin sandi ke README atau Git. Simpan CA layanan di
+`private/aiven/ca.pem`. Buat `JWT_SECRET` berbeda dari demo Laragon.
+
+[koneksi.ts](src/config/koneksi.ts) menyusun opsi untuk semua pool MySQL.
+Mode Aiven wajib memakai host layanan, kredensial, dan CA. `rejectUnauthorized`
+dan `verifyIdentity` selalu aktif: sertifikat serta nama host harus cocok.
+File foto mode Aiven memakai `private/uploads-aiven/db-rakrapi`; foto Laragon
+tetap di `private/uploads/db-rakrapi`. Penyimpanan foto ini masih di laptop,
+bukan di Aiven. Jangan arahkan `UPLOAD_DIR` kedua lingkungan ke folder yang sama.
+
+**DBeaver** adalah alat untuk melihat tabel dan menjalankan SQL. Backend tetap
+menggunakan mysql2 + Drizzle, tanpa bergantung pada DBeaver. Buat koneksi MySQL
+ke host/port dari halaman Overview Aiven, gunakan database awal `defaultdb`,
+dan isi sandi di laptop. Pada pengaturan SSL, pilih CA layanan dan verifikasi
+sertifikat server. Untuk driver MySQL Connector/J, gunakan
+`sslMode=VERIFY_IDENTITY`; jangan aktifkan kepercayaan pada semua sertifikat.
+Pilih Test Connection, lalu lihat database dan tabel sebelum menjalankan SQL.
+
+Pemeriksaan baca saja yang memakai koneksi dan CA yang sama:
+
+```powershell
+npm.cmd run build
+node --env-file=private/aiven/admin.env scripts/periksa-aiven.cjs
+```
+
+File `private/aiven/admin.env` digunakan hanya untuk pemeriksaan/penyiapan,
+bukan menjalankan API. Script melaporkan host, port, hasil verifikasi TLS,
+sidik sertifikat, server MySQL, daftar tabel, dan hasil `SELECT DATABASE()`
+melalui Drizzle bila `rakrapi` sudah ada. Script tidak menampilkan sandi
+dan tidak menerapkan migration. Jika ada tabel proyek lain, berhenti sebelum
+perubahan. Jika `rakrapi` sudah berisi tabel, bandingkan skemanya terlebih dahulu.
+
+Untuk database tujuan yang sudah dipastikan kosong, urutan SQL adalah
+`01_skema.sql`, `03_role_warga.sql`, `04_prosedur_pegawai.sql`,
+`05_lowongan.sql`, lalu `06_pesanan.sql`, dengan database aktif `rakrapi`.
+Jangan jalankan `02_demo.sql`, seed, atau runner tes pada Aiven.
+Gunakan akun aplikasi terpisah dengan hak setara akun lokal: health membaca
+`kategori.id`, auth membaca profil dan memasukkan nama/email/hash tanpa hak
+menulis role, pegawai hanya EXECUTE prosedur `tambah_pegawai`, dan katalog
+memakai hak tabel yang didokumentasikan di bawah. Konfirmasikan penyiapan
+akun Aiven sebelum memberinya izin; jangan gunakan administrator sebagai akun API.
+
+Setelah skema, akun aplikasi, dan `.env.aiven` tersedia, jalankan:
+
+```powershell
+node --env-file=.env.aiven dist/index.js
+```
+
+Di terminal lain:
+
+```powershell
+curl.exe -i http://127.0.0.1:3001/api/health
+```
+
+HTTP 200 saja belum membuktikan Aiven. Cocokkan dengan keluaran pemeriksaan
+host dan TLS di atas. Per 18 November 2026, host/CA layanan sudah diperiksa,
+namun kredensial privat belum diisi; pemeriksaan tabel, migration dan HTTP 200
+dari Aiven **belum teruji**. Layanan yang ditemukan berpaket Developer-1 dengan
+kredit trial, bukan paket Free. Tidak ada perubahan paket atau pembelian.
+Deployment website Vercel/Netlify dan hosting API tetap langkah tersendiri.
+
 ## Cara membaca backend RakRapi
 
 Ikuti permintaan pegawai yang sudah masuk dan membuka `GET /api/barang/2`. Tiga file pertama menunjukkan alur utamanya.

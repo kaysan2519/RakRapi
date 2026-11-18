@@ -38,6 +38,6 @@ Untuk latihan yang mencakup tambah, ubah, dan hapus, gunakan database demo terpi
 
 - **Pemilik** membuka **Menu pemilik → Kelola kategori** untuk membaca detail, mengubah nama, atau menghapus dengan konfirmasi. Kategori yang masih dipakai mendapat pesan penolakan. Dari **Tambah barang**, isi kategori, harga dan stok, pilih foto, lalu simpan. Gunakan data toko yang memang ingin disimpan saat memakai katalog utama.
 - **Pegawai** membuka **Minyak goreng 1 L** untuk melihat harga, stok, kategori dan foto. Untuk menjelaskan asal nama kategori, ikuti [route](backend/src/routes/barang.routes.ts), [controller](backend/src/controllers/barang.controller.ts), lalu [INNER JOIN pada service](backend/src/services/barang.service.ts).
-- **Warga** masuk dari layar yang sama dan melihat beranda bansos. Tombol **Keluar** memungkinkan pengguna berpindah akun.
+- **Warga** masuk dari layar yang sama dan melihat Katalog. Warga dapat memesan barang, membuka Pesanan saya, melihat Lowongan, atau memilih tab Bansos. Tombol **Keluar** memungkinkan pengguna berpindah akun.
 
 Petunjuk API dan SQL ada di [panduan backend](backend/README.md). Pengujian Android memakai [panduan Flutter](frontend/README.md). Rancangan, diagram, dan hasil uji tersedia di [SRS RakRapi](docs/SRS-RakRapi.docx).

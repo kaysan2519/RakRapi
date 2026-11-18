@@ -1,15 +1,9 @@
 import mysql from "mysql2/promise";
 import { drizzle } from "drizzle-orm/mysql2";
+import { opsiKoneksi } from "./koneksi";
 
 function createPool(user: string | undefined, password: string | undefined, database = process.env.DB_NAME ?? "rakrapi") {
-  return mysql.createPool({
-    host: process.env.DB_HOST ?? "127.0.0.1",
-    port: Number(process.env.DB_PORT ?? 3306),
-    user,
-    password,
-    database,
-    connectTimeout: 3000,
-  });
+  return mysql.createPool(opsiKoneksi(user, password, database));
 }
 
 export const db = drizzle(createPool(process.env.DB_USER, process.env.DB_PASSWORD));
