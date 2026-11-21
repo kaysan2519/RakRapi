@@ -15,66 +15,61 @@
 ## 2. Branch & Commit Aktual
 
 - **Branch aktif:** `codex/ui-env-pixel8` *(tidak di-merge ke `main`, tidak force push)*
-- **Milestone sebelumnya:** `7650557` — `test: perketat validasi exp JWT, pesan sesi 401, dan uji autentikasi`
-- **Milestone terbaru (Fase 3 Tahap 1–2):** Persiapan konfigurasi backend cloud Linux (`HOST`, CORS allowlist `CORS_ORIGIN`, `engines` Node `>=22.9.0 <23.0.0`, unit test CORS) + audit Aiven TLS & evaluasi validasi foto.
+- **Riwayat milestone terakhir:**
+  - `7650557` — `test: perketat validasi exp JWT, pesan sesi 401, dan uji autentikasi`
+  - `52668ee` — `feat: siapkan konfigurasi HOST, CORS allowlist, dan versi Node untuk cloud`
+  - Milestone terbaru (Fase 3 Tahap 3): Integrasi Cloudinary privat (`authenticated`), validasi foto lintas Windows/Linux Opsi V2 bersyarat (tanpa Sharp), backup lokal database & foto, dan pengujian keamanan upload (`test/foto.cjs`).
 
-## 3. Keputusan Terbaru Pengembang (21 November 2026 — Fase 3)
+## 3. Keputusan Terbaru Pengembang (21 November 2026 — Fase 3 Lanjutan)
 
-1. **Prioritas utama:** RakRapi online All-Devices (Android APK + Website MAPIL) tanpa ketergantungan laptop, kabel USB, atau ADB Reverse. Konfigurasi development lokal tetap dipertahankan.
-2. **Stack deployment yang disetujui:**
-   - **Database online:** MySQL Aiven (`mysql-1067ea2a-mapiltugass.l.aivencloud.com:17374`).
-   - **Hosting backend:** Render Free (`$0/bln`, Linux, HTTPS otomatis, Secret File `/etc/secrets/ca.pem`).
-   - **Penyimpanan foto online:** Cloudinary Free (`$0/bln`, sesuai rekap materi guru *Intro Express JS*, mode autentikasi/privat; integrasi dikerjakan di Tahap 3 setelah keputusan validasi foto).
-   - **Website MAPIL:** Flutter Web + Vercel (`$0/bln`, deployment final menunggu konfirmasi guru).
-   - **Layanan berbayar / kartu pembayaran:** DILARANG tanpa persetujuan eksplisit.
-3. **Batas perubahan Tahap 2:** Hanya `index.ts` (`HOST`), `app.ts` + `middleware/cors.middleware.ts` (`CORS_ORIGIN`), `package.json` (`engines` Node 22.x), `.env.example`, dan tes unit di `test/koneksi.cjs`. `koneksi.ts` dipertahankan tanpa perubahan karena Render Free mendukung Secret File.
-4. **Validasi foto lintas OS (Tahap 3):** Penggantian validasi penuh `System.Drawing` dengan pemeriksaan header saja **BELUM disetujui**; menunggu keputusan opsi validasi lintas Linux/Windows sebelum memasang library atau mengubah `foto.validation.ts`.
-5. **Migrasi Aiven (Tahap 4):** Menunggu pengisian kredensial Aiven privat oleh pengembang, hasil `periksa-aiven.cjs`, dan persetujuan migrasi.
+1. **Validasi foto lintas OS (Opsi V2 bersyarat):**
+   - Menggunakan package `cloudinary` (`^2.11.0`), **tidak memasang `sharp`** dan tidak menambah dependency lain.
+   - Mempertahankan validasi lokal Windows (`System.Drawing`) + menambah validasi struktur/dimensi PNG (`IHDR` + dekompresi `IDAT` via `node:zlib`) & JPEG (`SOF`/`SOS`) lintas OS (≤ 5 MiB, ≤ 16 MP, tolak MIME palsu & isi rusak) + validasi decode Cloudinary di production.
+   - Keamanan Cloudinary tetap wajib dibuktikan lewat pengujian live setelah kredensial Cloudinary diisi secara privat.
+2. **Penyimpanan foto online:** Cloudinary mode `authenticated` (privat), diambil server melalui signed download URL jangka pendek (60 detik) dan disajikan lewat endpoint existing `GET /api/barang/:id/foto` yang dilindungi JWT + role. Mode lokal tetap menjadi default development.
+3. **Backup lokal:** Disetujui backup non-destruktif database Laragon dan foto asli ke `backend/private/` (diabaikan Git).
+4. **Aiven & Deployment:** Migrasi production ke Aiven, deployment final Render, dan deployment final Flutter Web Vercel **belum diizinkan** sebelum hasil inspeksi Aiven (`periksa-aiven.cjs`), uji live Cloudinary, dan persetujuan berikutnya.
 
-## 4. Kondisi Aiven & Verifikasi TLS (21 November 2026)
+## 4. Kondisi Aiven & Status Permission (21 November 2026)
 
-- **Jangkauan TCP & MySQL handshake (baca-saja, tanpa login):** **TERJANGKAU & AKTIF**
-  - Host/Port: `mysql-1067ea2a-mapiltugass.l.aivencloud.com:17374`
-  - Versi server MySQL Aiven: `8.4.11` (protokol 10)
-- **Verifikasi TLS terhadap `backend/private/aiven/ca.pem` (`rejectUnauthorized: true`):** **LULUS**
-  - Protokol: `TLSv1.3`
-  - CN sertifikat server: `mysql-1067ea2a-2` (berlaku hingga `Feb 3 09:52:49 2029 GMT`)
-  - SHA-256 fingerprint: `83:1C:7F:A5:99:BF:C2:7D:F0:19:A5:7A:5F:4C:EB:B4:F1:E8:CC:DC:3E:DA:31:F0:8D:4D:71:AB:B5:59:7F:40`
-- **Belum dapat diverifikasi (menunggu aksi pemilik akun):**
-  - Status kredit trial & masa aktif paket Developer-1 di Aiven Console (`https://console.aiven.io`) hingga melewati 25 November 2026.
-  - Daftar database/tabel dan izin `GRANT`/`CREATE PROCEDURE` pada `avnadmin` karena `ADMIN_DB_PASSWORD` (di `.env`) dan `DB_PASSWORD` (di `private/aiven/admin.env`) masih kosong.
+- **Jangkauan & TLS (`mysql-1067ea2a-mapiltugass.l.aivencloud.com:17374`):** Terjangkau (`MySQL 8.4.11`), handshake `TLSv1.3` terhadap `backend/private/aiven/ca.pem` lulus (`tls_verified: true`).
+- **Login & Permission Aiven:** **BELUM DAPAT DIVERIFIKASI** karena `DB_PASSWORD` di `backend/private/aiven/admin.env` dan `ADMIN_DB_PASSWORD` di `backend/.env` masih kosong.
+- **Tindakan yang dibutuhkan pengembang (privat, jangan kirim ke chat):**
+  1. Cek status layanan *Running* & sisa kredit trial paket Developer-1 di `https://console.aiven.io`.
+  2. Isi `DB_PASSWORD=` di `C:\Users\Kaysan\UjiLevel\backend\private\aiven\admin.env` (tidak mengubah `.env` Laragon).
 
-## 5. Rencana Pencadangan Lokal Sebelum Migrasi
+## 5. Status Backup Lokal Non-Destruktif (Terverifikasi 21 November 2026)
 
-- Database Laragon lokal (`rakrapi`) **tidak boleh** dihapus atau di-reset.
-- Sebelum migrasi Tahap 4, cadangkan ke folder `backend/private/` (sudah masuk `.gitignore`):
-  1. Dump SQL penuh termasuk stored procedure: `mysqldump --login-path=rakrapi --host=127.0.0.1 --port=3306 --routines --single-transaction --databases rakrapi` → `backend/private/backup-laragon-YYYYMMDD.sql`.
-  2. Salinan folder foto asli: `backend/private/uploads/db-rakrapi/` → `backend/private/backup-foto-YYYYMMDD/`.
+- **Backup SQL:** `backend/private/backup-laragon-20261121.sql` (`9.250` byte, `mysqldump --routines --single-transaction --default-character-set=utf8mb4`, exit code `0`, UTF-8 valid tanpa null byte). Memuat 6 tabel (`users`, `kategori`, `barang`, `lowongan`, `pesanan`, `detail_pesanan`), 4 Foreign Key, stored procedure `tambah_pegawai`, serta data asli (`barang`, `kategori`, `users`).
+- **Backup Foto:** `backend/private/backup-foto-20261121/431a9e84-3c42-438a-b876-a2f8816c61dd.png` — SHA-256 identik dengan file asli (`D731582FC79F60F0740122930E1FAABF116DE7CF487DB4E2336780BD7E968BF7`).
+- **Keamanan Git:** Kedua backup berada di `backend/private/` yang diabaikan oleh `backend/.gitignore`.
 
-## 6. Hasil Pengujian Terverifikasi (21 November 2026 — Pasca Tahap 2)
+## 6. Hasil Pengujian Terverifikasi (21 November 2026)
 
-| Pengujian | Perintah | Hasil Aktual | Lingkungan |
+| Pengujian | Perintah | Hasil Aktual | Status |
 |---|---|---|---|
-| Handshake TCP & TLS Aiven | Node TLS probe read-only + `ca.pem` | **LULUS** — MySQL `8.4.11`, `TLSv1.3`, `tls_verified: true` | Aiven Cloud (tanpa login/tulis) |
-| Build Backend | `npm.cmd run build` (`tsc`) | **LULUS** — exit code 0 | `backend/` |
-| Tes Koneksi & CORS | `node --test test/koneksi.cjs` | **LULUS** — 6/6 tes lulus (termasuk allowlist CORS, preflight `OPTIONS` 204/403, tolak wildcard `*`) | Unit test (tanpa DB) |
-| Tes Akun & JWT HTTP | `node --env-file=.env test/akun.cjs --uji-jwt` | **LULUS** — 90 cek JWT + register/pegawai/warga/lowongan lulus | DB uji terpisah sementara |
-| Tes Katalog HTTP | `node --env-file=.env --test test/katalog.cjs` | **LULUS** — 5/5 tes lulus (CRUD kategori/barang, JOIN, 409, upload foto, restart) | DB uji terpisah sementara |
-| Flutter Analyze & Test *(Tahap 1)* | `flutter analyze --no-pub` & `flutter test --no-pub` | **LULUS** — 0 issues, 18/18 tes lulus (frontend tidak diubah di Tahap 2) | `frontend/` |
-| Integritas Data & Foto Asli | SHA-256 foto ID 2 | **UTUH** — `D731582FC79F60F0740122930E1FAABF116DE7CF487DB4E2336780BD7E968BF7` | `backend/private/uploads/db-rakrapi/` |
+| Build Backend | `npm.cmd run build` (`tsc`) | Exit code 0, 0 error | **LULUS** |
+| Koneksi & CORS | `node --test test/koneksi.cjs` | 6/6 lulus (Laragon/Aiven TLS + allowlist CORS) | **LULUS** |
+| Validasi Foto & Cloudinary (Terisolasi) | `node --test test/foto.cjs` | 4/4 suite lulus (PNG/JPEG valid, MIME palsu 415, >5 MiB 413, >16 MP PNG/JPEG 415, korup tengah 415, header valid isi IDAT rusak 415 Windows & Linux, Linux tanpa Cloudinary 503, gangguan Cloudinary 503, rollback aset yatim aman tanpa hapus foto asli) | **LULUS** *(uji live Cloudinary menunggu kredensial privat)* |
+| Validasi Foto Asli ID 2 | `periksaFoto` read-only (`win32` & `linux`+Cloudinary) | `431a9e84-3c42-438a-b876-a2f8816c61dd.png` (`2.200.991` byte, `1254×1254`) lulus pada Windows & Linux | **LULUS** |
+| Akun & JWT HTTP | `node --env-file=.env test/akun.cjs --uji-jwt` | Register/pegawai/warga/lowongan + 90 pemeriksaan HTTP/JWT lulus | **LULUS** |
+| Katalog HTTP | `node --env-file=.env --test test/katalog.cjs` | 5/5 lulus (CRUD kategori/barang, JOIN, 409 RESTRICT, upload foto, restart) | **LULUS** |
+| Integritas Data Asli | Read-only `SELECT` MySQL `rakrapi` + SHA-256 | `barang` ID 2 (`Minyak goreng 1 L`, Rp19.000, stok `12.000` botol), `kategori` ID 2, `users` (`pemilik:1, pegawai:1, warga:2`), foto SHA-256 identik | **UTUH** |
 
-## 7. File yang Berubah pada Fase 3 Tahap 2
+## 7. File yang Berubah pada Tahap Ini
 
-- `backend/src/index.ts` — dukungan `HOST` dari env (default lokal tetap `127.0.0.1`).
-- `backend/src/middleware/cors.middleware.ts` — middleware CORS allowlist berbasis `CORS_ORIGIN` (tanpa wildcard `*`, dukung preflight `OPTIONS`, `Authorization`, `Content-Type`).
-- `backend/src/app.ts` — memasang `aturCors` sebelum route API.
-- `backend/package.json` — mengunci `engines.node` ke `>=22.9.0 <23.0.0` tanpa mengubah/upgrade dependency.
-- `backend/.env.example` — mendokumentasikan `HOST` dan `CORS_ORIGIN`.
-- `backend/test/koneksi.cjs` — menambah uji unit middleware CORS.
-- `HANDOVER_LOG.md` — diperbarui dengan hasil audit Aiven & Tahap 2.
+- `backend/package.json` & `backend/package-lock.json` — menambah hanya `cloudinary` (`^2.11.0`, 0 kerentanan).
+- `backend/src/validations/foto.validation.ts` — mempertahankan `System.Drawing` di Windows + menambah validasi struktur/dimensi PNG (`IHDR` + dekompresi `IDAT` via `node:zlib`) & JPEG (`SOF`/`SOS`) ≤ 16 MP lintas OS; menolak Linux tanpa Cloudinary (`503`).
+- `backend/src/services/foto.service.ts` — mendukung penyimpanan privat `authenticated` Cloudinary (upload stream, verifikasi format/dimensi, private download URL 60 detik server-side, pembersihan aset yatim aman) sambil mempertahankan mode lokal untuk development & runner uji.
+- `backend/.env.example` — menambah template variabel `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`.
+- `backend/.env` *(lokal, diabaikan Git)* — menambahkan 3 baris kosong `CLOUDINARY_*` siap diisi privat.
+- `backend/test/foto.cjs` — pengujian otomatis seluruh skenario validasi lintas OS & integrasi Cloudinary.
+- `HANDOVER_LOG.md` — diperbarui.
 
 ## 8. Langkah Berikutnya
 
-1. **Pengembang mengisi password `avnadmin` secara privat** di `backend/private/aiven/admin.env` (`DB_PASSWORD=...`) dan mengecek status paket/kredit trial di Aiven Console.
-2. **Jalankan inspeksi baca-saja Aiven** (`node --env-file=private/aiven/admin.env scripts/periksa-aiven.cjs`) serta uji izin `GRANT`/`CREATE PROCEDURE` sebelum menyetujui Tahap 4 (migrasi).
-3. **Putuskan metode validasi foto lintas Windows/Linux** untuk Tahap 3 (sebelum mengintegrasikan Cloudinary di `foto.service.ts` dan menyentuh `foto.validation.ts`).
+1. Pengembang mengisi kredensial secara privat (jangan dikirim ke chat):
+   - Aiven `avnadmin`: `DB_PASSWORD=` di `backend/private/aiven/admin.env` (plus cek kredit trial di Aiven Console).
+   - Cloudinary Free: `CLOUDINARY_CLOUD_NAME=`, `CLOUDINARY_API_KEY=`, `CLOUDINARY_API_SECRET=` di `backend/.env`.
+2. Jalankan verifikasi live baca-saja Aiven (`periksa-aiven.cjs` + audit hak `GRANT`/`CREATE ROUTINE`) dan pengujian live Cloudinary pada folder uji terisolasi (termasuk uji nyata file PNG/JPEG valid & korup terhadap server Cloudinary).
+3. Setelah hasil verifikasi Aiven & live Cloudinary disetujui, lanjut Tahap 4 (migrasi database Aiven) dan Tahap 5 (deploy backend Render Free).
