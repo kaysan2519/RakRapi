@@ -25,11 +25,12 @@ class _RakRapiState extends State<RakRapi> {
   Json? pengguna;
   bool memuat = true;
   String? masalahSesi;
+  String? pesanMasuk;
 
   @override
   void initState() {
     super.initState();
-    api.saatSesiHabis = keluar;
+    api.saatSesiHabis = () => keluar(sesiHabis: true);
     pulihkanSesi();
   }
 
@@ -53,10 +54,15 @@ class _RakRapiState extends State<RakRapi> {
     final token = sesi['token'] as String;
     await penyimpanan.setString('token', token);
     api.token = token;
-    if (mounted) setState(() => pengguna = sesi['user'] as Json);
+    if (mounted) {
+      setState(() {
+        pengguna = sesi['user'] as Json;
+        pesanMasuk = null;
+      });
+    }
   }
 
-  Future<void> keluar() async {
+  Future<void> keluar({bool sesiHabis = false}) async {
     api.token = null;
     await penyimpanan.remove('token');
     if (!mounted) return;
@@ -64,6 +70,7 @@ class _RakRapiState extends State<RakRapi> {
     setState(() {
       pengguna = null;
       masalahSesi = null;
+      pesanMasuk = sesiHabis ? 'Sesi berakhir. Silakan masuk kembali.' : null;
     });
   }
 
@@ -91,7 +98,11 @@ class _RakRapiState extends State<RakRapi> {
         ),
       );
     } else if (pengguna == null) {
-      layar = LayarMasuk(masuk: masuk, daftar: api.daftarWarga);
+      layar = LayarMasuk(
+        masuk: masuk,
+        daftar: api.daftarWarga,
+        pesanSesi: pesanMasuk,
+      );
     } else if (pengguna!['role'] == 'warga') {
       layar = BerandaWarga(api: api, nama: pengguna!['nama'], keluar: keluar);
     } else if (pengguna!['role'] == 'pemilik' ||
@@ -184,9 +195,15 @@ class _BerandaWargaState extends State<BerandaWarga> {
 }
 
 class LayarMasuk extends StatefulWidget {
-  const LayarMasuk({super.key, required this.masuk, required this.daftar});
+  const LayarMasuk({
+    super.key,
+    required this.masuk,
+    required this.daftar,
+    this.pesanSesi,
+  });
   final Future<void> Function(String, String) masuk;
   final Future<void> Function(String, String, String) daftar;
+  final String? pesanSesi;
   @override
   State<LayarMasuk> createState() => _LayarMasukState();
 }
@@ -305,7 +322,8 @@ class _LayarMasukState extends State<LayarMasuk> {
                     ),
                   ),
                 ),
-                if (pesan != null) PesanGagal(pesan!),
+                if (pesan != null || widget.pesanSesi != null)
+                  PesanGagal(pesan ?? widget.pesanSesi!),
                 const SizedBox(height: 20),
                 FilledButton(
                   onPressed: sibuk ? null : kirim,

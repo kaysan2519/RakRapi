@@ -119,7 +119,12 @@ export function idPenggunaDariToken(authorization: string | undefined): number |
   const key = jwtSecret();
   try {
     const claims = jwt.verify(bearer[1], key, { algorithms: ["HS256"], issuer: "rakrapi" });
-    if (typeof claims === "string" || !claims.sub) {
+    if (typeof claims === "string" || typeof claims.sub !== "string") {
+      return undefined;
+    }
+
+    // verify memeriksa waktu exp jika ada; aplikasi mewajibkan batas waktunya.
+    if (typeof claims.exp !== "number" || !Number.isFinite(claims.exp)) {
       return undefined;
     }
 

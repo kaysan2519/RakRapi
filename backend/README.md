@@ -135,6 +135,52 @@ minimal 32 byte. Saat demo, kirim permintaan ke `http://127.0.0.1:3000`.
 | `GET /api/auth/me` | Kirim header `Authorization: Bearer <token>` untuk membaca profil sendiri. |
 | `GET /api/auth/pemilik` | Gunakan header yang sama untuk memeriksa akses khusus pemilik. |
 
+### JWT dan sesi aplikasi
+
+Login di [akun.controller.ts](src/controllers/akun.controller.ts) memanggil
+`periksaLogin` di [akun.service.ts](src/services/akun.service.ts). Service membaca
+pengguna melalui `authDb` sesuai konfigurasi aktif, lalu memeriksa sandi dengan
+`bcrypt.compare`. `buatToken` menandatangani JWT memakai `JWT_SECRET` dari `.env`,
+algoritma **HS256**, issuer `rakrapi`, dan masa berlaku **1 jam (3.600 detik)**.
+Payload hanya memuat `sub` (ID), `iss`, `iat`, dan `exp`; sandi/hash tidak dikirim.
+
+`idPenggunaDariToken` memanggil `jwt.verify` dengan daftar algoritma HS256,
+memeriksa issuer, signature, kedaluwarsa, serta mewajibkan `exp` dan ID yang valid.
+[akses.middleware.ts](src/middleware/akses.middleware.ts) mengambil profil/role
+terbaru dari MySQL pada setiap permintaan. Token hilang/tidak sah atau pengguna
+tidak ditemukan menghasilkan 401; pengguna tanpa hak menghasilkan 403.
+Register publik tetap warga dan Tambah pegawai tetap hanya untuk pemilik.
+
+Flutter [api.dart](../frontend/lib/api.dart) mengirim Bearer melalui `_kirim`,
+termasuk foto dan multipart. [main.dart](../frontend/lib/main.dart) menyimpan
+token dengan `SharedPreferencesAsync`, memulihkannya melalui `/auth/me`, dan
+menghapusnya saat keluar. Respons 401 privat mengembalikan layar Masuk dengan
+pesan singkat; 403, jaringan gagal, timeout, dan 503 tidak menghapus sesi.
+
+**Batas logout:** keluar menghapus token di perangkat. Salinan JWT yang sudah
+dimiliki pihak lain masih berlaku sampai `exp`, selama akun dan izin masih valid.
+Tidak ada pencabutan token di server atau refresh token; pengguna masuk kembali
+setelah token habis. Perubahan role di database langsung berlaku pada token lama.
+
+**Audit 19 November 2026:** 90 pemeriksaan JWT HTTP dan 5 tes katalog lulus pada
+database uji terpisah; 18 tes Flutter (termasuk 9 tes sesi) lulus dan analyze bersih.
+Kasus mencakup login benar/salah, token hilang/rusak/kedaluwarsa/tanpa `exp`,
+signature salah, algoritma lain/`none`, issuer salah, tiga peran, role palsu dalam
+token, serta perubahan role di MySQL tanpa menerbitkan token baru. Tes Flutter
+memakai HTTP/persistensi di memori untuk memeriksa Bearer, pemulihan, 401 pada
+profil/foto, logout, dan gangguan jaringan; tidak menulis katalog utama.
+Sesudah backend direstart, health/login/profil/detail/foto ID 2 di Laragon utama
+memberi 200; harga Rp19.000, stok 12 botol, `foto_key` dan byte foto tetap sama.
+
+Ulangi tes dari folder backend dengan MySQL Laragon aktif:
+
+```powershell
+npm.cmd run build
+node --env-file=.env test/akun.cjs --uji-jwt
+node --env-file=.env --test test/katalog.cjs
+# Dari folder frontend: flutter test --no-pub test/sesi_test.dart
+```
+
 **Pemilik uji.** Gunakan akun pemilik yang sudah tersedia di Laragon untuk
 menguji menu Tambah pegawai. Login pemilik memakai endpoint yang sama dengan
 login pegawai dan warga.

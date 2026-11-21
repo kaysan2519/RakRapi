@@ -137,10 +137,11 @@ async function main() {
     await once(listener, 'listening');
     const port = listener.address().port;
     await new Promise(resolve => listener.close(resolve));
+    const kunciJwtUji = sandi();
     server = spawn(process.execPath, ['--env-file=.env', 'dist/index.js'], { windowsHide: true, stdio: 'ignore',
       env: { ...process.env, PORT: String(port), AUTH_DB_NAME: db, AUTH_DB_USER: publik, AUTH_DB_PASSWORD: sandiPublik,
         PEGAWAI_DB_USER: staf, PEGAWAI_DB_PASSWORD: sandiStaf, CATALOG_DB_NAME: db, CATALOG_DB_USER: katalog,
-        CATALOG_DB_PASSWORD: sandiKatalog, UPLOAD_DIR: folder, JWT_SECRET: sandi() } });
+        CATALOG_DB_PASSWORD: sandiKatalog, UPLOAD_DIR: folder, JWT_SECRET: kunciJwtUji } });
     const api = 'http://127.0.0.1:' + port + '/api';
     for (let i=0; i<100; i++) {
       try { if ((await fetch(api + '/health')).ok) break; } catch {}
@@ -194,6 +195,13 @@ async function main() {
     const hashBaru = admin("SELECT password_hash FROM users WHERE email='warga@rakrapi.test'", db);
     assert.ok(await bcrypt.compare(password, hashBaru));
     console.log('Lulus: register 201, duplikat 409, katalog warga GET 200 dan tulis 403, tambah pegawai 401/403/201. Lowongan pemilik 201/204, daftar warga 200 aktif lalu kosong, kelola oleh warga/pegawai 403.');
+    if (process.argv[2] === '--uji-jwt') {
+      await require('./jwt.cjs').ujiJwt({
+        api, pemilik, pegawai, warga, emailPemilik, password, kunciJwtUji,
+        sql: perintah => admin(perintah, db),
+      });
+      return;
+    }
     if (demoPesanan || process.argv[2] === '--uji-pesanan') {
       await require('./pesanan.cjs').ujiPesanan({api,pemilik,pegawai,warga,password,sql: perintah => admin(perintah, db)});
       console.log('Database pesanan uji: ' + db);
