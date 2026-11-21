@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { opsiKoneksi } = require('../dist/config/koneksi');
+const { aturCors } = require('../dist/middleware/cors.middleware');
 
 // Hanya memeriksa konfigurasi. Tidak menghubungi atau menulis ke database.
 function denganEnv(nilai, periksa) {
@@ -78,5 +79,59 @@ test('Opsi Aiven selalu memverifikasi CA dan identitas host untuk setiap akun', 
   } finally {
     fs.unlinkSync(file);
     fs.rmdirSync(folder);
+  }
+});
+
+test('CORS hanya mengizinkan origin terdaftar, menolak wildcard dan preflight asing', () => {
+  const sebelum = process.env.CORS_ORIGIN;
+  function jalankan(method, origin) {
+    const headers = {};
+    let status = null, selesai = false, lanjut = false;
+    const req = { method, get: (nama) => (nama.toLowerCase() === 'origin' ? origin : undefined) };
+    const res = {
+      vary: (k) => { headers.vary = k; },
+      set: (k, v) => { headers[k.toLowerCase()] = v; },
+      status: (kode) => { status = kode; return res; },
+      end: () => { selesai = true; },
+    };
+    aturCors(req, res, () => { lanjut = true; });
+    return { headers, status, selesai, lanjut };
+  }
+
+  try {
+    process.env.CORS_ORIGIN = 'https://rakrapi.vercel.app/, *';
+
+    const preflight = jalankan('OPTIONS', 'https://rakrapi.vercel.app');
+    assert.equal(preflight.status, 204);
+    assert.equal(preflight.selesai, true);
+    assert.equal(preflight.lanjut, false);
+    assert.equal(preflight.headers['access-control-allow-origin'], 'https://rakrapi.vercel.app');
+    assert.match(preflight.headers['access-control-allow-headers'], /Authorization/);
+    assert.match(preflight.headers['access-control-allow-headers'], /Content-Type/);
+    assert.equal(preflight.headers.vary, 'Origin');
+
+    const getSah = jalankan('GET', 'https://rakrapi.vercel.app');
+    assert.equal(getSah.lanjut, true);
+    assert.equal(getSah.headers['access-control-allow-origin'], 'https://rakrapi.vercel.app');
+
+    const preflightAsing = jalankan('OPTIONS', 'https://asing.example');
+    assert.equal(preflightAsing.status, 403);
+    assert.equal(preflightAsing.selesai, true);
+    assert.equal(preflightAsing.lanjut, false);
+    assert.equal(preflightAsing.headers['access-control-allow-origin'], undefined);
+
+    const getAsing = jalankan('GET', 'https://asing.example');
+    assert.equal(getAsing.lanjut, true);
+    assert.equal(getAsing.headers['access-control-allow-origin'], undefined);
+
+    const tanpaOrigin = jalankan('GET', undefined);
+    assert.equal(tanpaOrigin.lanjut, true);
+    assert.equal(tanpaOrigin.headers['access-control-allow-origin'], undefined);
+  } finally {
+    if (sebelum === undefined) {
+      delete process.env.CORS_ORIGIN;
+    } else {
+      process.env.CORS_ORIGIN = sebelum;
+    }
   }
 });
