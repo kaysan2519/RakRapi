@@ -1,5 +1,5 @@
 import type { RequestHandler } from "express";
-import { daftarkanAkun, periksaLogin } from "../services/akun.service";
+import { daftarkanAkun, daftarPegawai, periksaLogin } from "../services/akun.service";
 import { emailDari, validasiAkun } from "../validations/akun.validation";
 
 export function buatAkun(role: "warga" | "pegawai"): RequestHandler {
@@ -35,4 +35,9 @@ export const profilSendiri: RequestHandler = (_req, res) => {
 
 export const aksesPemilik: RequestHandler = (_req, res) => {
   res.json({ pesan: "Akses pemilik diterima." });
+};
+
+export const listPegawai: RequestHandler = async (_req, res) => {
+  const data = await daftarPegawai();
+  res.json({ data });
 };

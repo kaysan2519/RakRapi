@@ -4,12 +4,12 @@ import path from "node:path";
 import { v2 as cloudinary } from "cloudinary";
 import { eq } from "drizzle-orm";
 import { db } from "../config/db";
-import { barang } from "../config/schema";
+import { barang, lowongan, pengumuman, programBansos } from "../config/schema";
 import { KesalahanKatalog } from "../middleware/error.middleware";
 import { periksaFoto } from "../validations/foto.validation";
 
-// Nama file buatan backend: UUID versi 4 dengan ekstensi .jpg atau .png.
-const polaKeyFoto = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(jpg|png)$/;
+// Nama file buatan backend: UUID versi 4 dengan ekstensi .jpg, .png, atau .webp.
+const polaKeyFoto = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(jpg|png|webp)$/;
 
 function namaDatabase() {
   return process.env.DB_NAME ?? "rakrapi";
@@ -96,8 +96,8 @@ export async function bacaFoto(key: string) {
   if (!polaKeyFoto.test(key)) {
     throw new KesalahanKatalog(404, "Foto tidak ditemukan.");
   }
-  const ekstensi = key.endsWith(".png") ? "png" : "jpg";
-  const mime = ekstensi === "png" ? "image/png" : "image/jpeg";
+  const ekstensi = key.endsWith(".png") ? "png" : key.endsWith(".webp") ? "webp" : "jpg";
+  const mime = ekstensi === "png" ? "image/png" : ekstensi === "webp" ? "image/webp" : "image/jpeg";
 
   if (!memakaiCloudinary()) {
     try {
@@ -130,16 +130,22 @@ export async function bacaFoto(key: string) {
   return { bytes: Buffer.from(await respons.arrayBuffer()), mime };
 }
 
-export async function hapusJikaLepas(key: string) {
-  if (!polaKeyFoto.test(key)) {
+async function masihDipakai(key: string): Promise<boolean> {
+  const [diBarang] = await db.select({ id: barang.id }).from(barang).where(eq(barang.foto_key, key)).limit(1);
+  if (diBarang) return true;
+  const [diLowongan] = await db.select({ id: lowongan.id }).from(lowongan).where(eq(lowongan.foto_key, key)).limit(1);
+  if (diLowongan) return true;
+  const [diBansos] = await db.select({ id: programBansos.id }).from(programBansos).where(eq(programBansos.foto_key, key)).limit(1);
+  if (diBansos) return true;
+  const [diPengumuman] = await db.select({ id: pengumuman.id }).from(pengumuman).where(eq(pengumuman.foto_key, key)).limit(1);
+  return Boolean(diPengumuman);
+}
+
+export async function hapusJikaLepas(key: string | null | undefined) {
+  if (!key || !polaKeyFoto.test(key)) {
     return;
   }
-  const [dipakai] = await db
-    .select({ id: barang.id })
-    .from(barang)
-    .where(eq(barang.foto_key, key))
-    .limit(1);
-  if (dipakai) {
+  if (await masihDipakai(key)) {
     return;
   }
 
@@ -159,6 +165,15 @@ export async function hapusJikaLepas(key: string) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
       throw err;
     }
+  }
+}
+
+export async function bersihkanFotoAman(key: string | null | undefined) {
+  if (!key) return;
+  try {
+    await hapusJikaLepas(key);
+  } catch {
+    console.warn("Pembersihan foto tertunda.");
   }
 }
 

@@ -6,7 +6,7 @@ export class KesalahanKatalog extends Error {
   }
 }
 
-function kodeMysql(error: unknown): string | undefined {
+export function kodeMysql(error: unknown): string | undefined {
   if (!(error instanceof Error)) {
     return undefined;
   }
@@ -24,15 +24,15 @@ export const tanganiError: ErrorRequestHandler = (error, _req, res, _next) => {
   }
   switch (kodeMysql(error)) {
     case "ER_DUP_ENTRY":
-      res.status(409).json({ pesan: "Nama kategori sudah digunakan." });
+      res.status(409).json({ pesan: "Data sudah ada dan tidak boleh duplikat." });
       return;
     case "ER_ROW_IS_REFERENCED":
     case "ER_ROW_IS_REFERENCED_2":
-      res.status(409).json({ pesan: "Kategori ini masih digunakan. Kategori bisa dihapus setelah tidak ada barang yang menggunakannya." });
+      res.status(409).json({ pesan: "Data masih digunakan oleh catatan lain sehingga tidak dapat dihapus." });
       return;
     case "ER_NO_REFERENCED_ROW":
     case "ER_NO_REFERENCED_ROW_2":
-      res.status(400).json({ pesan: "Kategori tidak ditemukan." });
+      res.status(400).json({ pesan: "Referensi data tidak ditemukan." });
       return;
   }
   if (error.type === "entity.parse.failed" || error.status === 413) {

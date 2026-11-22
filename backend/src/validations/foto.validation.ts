@@ -3,9 +3,11 @@ import { KesalahanKatalog } from "../middleware/error.middleware";
 
 export const batasByteFoto = 5 * 1024 * 1024;
 export const batasPikselFoto = 16_000_000;
-export const pesanFotoTidakValid = "Gunakan foto JPEG atau PNG yang valid, maksimal 16 megapiksel.";
+export const pesanFotoTidakValid = "Gunakan foto JPG, PNG, atau WebP yang valid, maksimal 16 megapiksel.";
 
-function formatFoto(file: Express.Multer.File): "png" | "jpg" {
+export type EkstensiFoto = "png" | "jpg" | "webp";
+
+function formatFoto(file: Express.Multer.File): EkstensiFoto {
   const bytes = file.buffer;
   if (bytes.length > batasByteFoto) {
     throw new KesalahanKatalog(413, "Foto maksimal 5 MiB.");
@@ -14,13 +16,15 @@ function formatFoto(file: Express.Multer.File): "png" | "jpg" {
     throw new KesalahanKatalog(415, pesanFotoTidakValid);
   }
 
-  // Cocokkan MIME dengan penanda awal dan akhir file PNG/JPEG.
+  // Cocokkan MIME dengan penanda biner file PNG, JPEG, atau WebP.
   const awalPng = Buffer.from("89504e470d0a1a0a", "hex");
   const akhirPng = Buffer.from("0000000049454e44ae426082", "hex");
   const penandaPngCocok = bytes.subarray(0, 8).equals(awalPng)
     && bytes.subarray(-12).equals(akhirPng);
   const awalJpegCocok = bytes[0] === 255 && bytes[1] === 216;
   const akhirJpegCocok = bytes.at(-2) === 255 && bytes.at(-1) === 217;
+  const penandaWebpCocok = bytes.subarray(0, 4).toString("ascii") === "RIFF"
+    && bytes.subarray(8, 12).toString("ascii") === "WEBP";
 
   if (file.mimetype === "image/png" && penandaPngCocok) {
     return "png";
@@ -28,10 +32,13 @@ function formatFoto(file: Express.Multer.File): "png" | "jpg" {
   if (file.mimetype === "image/jpeg" && awalJpegCocok && akhirJpegCocok) {
     return "jpg";
   }
+  if (file.mimetype === "image/webp" && penandaWebpCocok) {
+    return "webp";
+  }
   throw new KesalahanKatalog(415, pesanFotoTidakValid);
 }
 
-export async function periksaFoto(file: Express.Multer.File): Promise<"png" | "jpg"> {
+export async function periksaFoto(file: Express.Multer.File): Promise<EkstensiFoto> {
   const ekstensi = formatFoto(file);
   try {
     // Sharp dipakai hanya untuk validasi ketat (failOn: "warning" + batas 16 MP).
@@ -44,7 +51,8 @@ export async function periksaFoto(file: Express.Multer.File): Promise<"png" | "j
     const info = await gambar.metadata();
     const formatCocok =
       (ekstensi === "png" && info.format === "png")
-      || (ekstensi === "jpg" && info.format === "jpeg");
+      || (ekstensi === "jpg" && info.format === "jpeg")
+      || (ekstensi === "webp" && info.format === "webp");
     const lebar = info.width ?? 0;
     const tinggi = info.height ?? 0;
     if (!formatCocok || lebar <= 0 || tinggi <= 0 || BigInt(lebar) * BigInt(tinggi) > BigInt(batasPikselFoto)) {

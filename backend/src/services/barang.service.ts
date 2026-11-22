@@ -1,9 +1,9 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { db } from "../config/db";
 import { barang, kategori } from "../config/schema";
 import { KesalahanKatalog } from "../middleware/error.middleware";
 import { validasiBarang } from "../validations/barang.validation";
-import { bacaFoto, hapusJikaLepas, siapkanFoto, tulisFoto } from "./foto.service";
+import { bacaFoto, bersihkanFotoAman, siapkanFoto, tulisFoto } from "./foto.service";
 
 function barangDenganKategori() {
   return db
@@ -15,18 +15,35 @@ function barangDenganKategori() {
       harga_rupiah: barang.harga_rupiah,
       stok: barang.stok,
       satuan: barang.satuan,
+      deskripsi: barang.deskripsi,
     })
     .from(barang)
     .innerJoin(kategori, eq(barang.kategori_id, kategori.id));
 }
 
-function sertakanUrlFoto<T extends { id: number }>(data: T) {
-  return { ...data, foto_url: `/api/barang/${data.id}/foto` };
+function formatBarang<T extends { id: number; stok: string }>(data: T) {
+  return {
+    ...data,
+    tersedia: Number(data.stok) > 0,
+    foto_url: `/api/barang/${data.id}/foto`,
+  };
 }
 
-export async function ambilDaftarBarang() {
-  const daftar = await barangDenganKategori().orderBy(asc(barang.nama), asc(barang.id));
-  return daftar.map(sertakanUrlFoto);
+export async function ambilDaftarBarang(filter?: { q?: string; kategoriId?: number }) {
+  const kondisi = [];
+  if (filter?.kategoriId !== undefined) {
+    kondisi.push(eq(barang.kategori_id, filter.kategoriId));
+  }
+  if (filter?.q) {
+    const pola = `%${filter.q.toLowerCase()}%`;
+    kondisi.push(
+      sql`(LOWER(${barang.nama}) LIKE ${pola} OR LOWER(${barang.deskripsi}) LIKE ${pola} OR LOWER(${kategori.nama}) LIKE ${pola})`,
+    );
+  }
+  const query = barangDenganKategori();
+  const daftar = await (kondisi.length > 0 ? query.where(and(...kondisi)) : query)
+    .orderBy(asc(barang.nama), asc(barang.id));
+  return daftar.map(formatBarang);
 }
 
 export async function ambilDetailBarang(idBarang: number) {
@@ -34,7 +51,7 @@ export async function ambilDetailBarang(idBarang: number) {
   if (!detail) {
     throw new KesalahanKatalog(404, "Barang tidak ditemukan.");
   }
-  return sertakanUrlFoto(detail);
+  return formatBarang(detail);
 }
 
 export async function ambilFotoBarang(idBarang: number) {
@@ -86,23 +103,23 @@ export async function simpanBarang(
     }
   } catch (err) {
     if (fotoBaru) {
-      await bersihkanFoto(fotoBaru.key);
+      await bersihkanFotoAman(fotoBaru.key);
     }
     throw err;
   }
 
   if (barangLama && fotoBaru) {
-    await bersihkanFoto(barangLama.foto_key);
+    await bersihkanFotoAman(barangLama.foto_key);
   }
 
   const [hasil] = await barangDenganKategori().where(eq(barang.id, idTersimpan));
-  return sertakanUrlFoto(hasil);
+  return formatBarang(hasil);
 }
 
 export async function hapusBarang(idBarang: number) {
   const lama = await cariBarang(idBarang);
   await db.delete(barang).where(eq(barang.id, idBarang));
-  await bersihkanFoto(lama.foto_key);
+  await bersihkanFotoAman(lama.foto_key);
 }
 
 async function cariBarang(id: number) {
@@ -111,12 +128,4 @@ async function cariBarang(id: number) {
     throw new KesalahanKatalog(404, "Barang tidak ditemukan.");
   }
   return dataBarang;
-}
-
-async function bersihkanFoto(key: string) {
-  try {
-    await hapusJikaLepas(key);
-  } catch {
-    console.warn("Pembersihan foto tertunda.");
-  }
 }

@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { db } from "../config/db";
 import { users } from "../config/schema";
 
@@ -63,6 +63,14 @@ async function cariUntukLogin(email: string) {
 export async function ambilProfil(id: number) {
   const [user] = await db.select(profil).from(users).where(eq(users.id, id)).limit(1);
   return user;
+}
+
+export async function daftarPegawai() {
+  return db
+    .select(profil)
+    .from(users)
+    .where(eq(users.role, "pegawai"))
+    .orderBy(asc(users.nama), asc(users.id));
 }
 
 function emailDuplikat(error: unknown): boolean {

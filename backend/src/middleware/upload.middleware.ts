@@ -5,7 +5,7 @@ import { KesalahanKatalog } from "./error.middleware";
 
 const unggahFoto = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: batasByteFoto + 1, files: 1, fields: 5, parts: 7, fieldSize: 1024 },
+  limits: { fileSize: batasByteFoto + 1, files: 1, fields: 12, parts: 14, fieldSize: 4096 },
 }).single("foto");
 
 export const terimaFoto: RequestHandler = (req, res, next) => {

@@ -1,6 +1,8 @@
 import { KesalahanKatalog } from "../middleware/error.middleware";
 import { bilanganBulat } from "./umum.validation";
 
+export type MetodePembayaran = "Bayar di kasir" | "Transfer bank";
+
 export function validasiPesanan(body: unknown) {
   if (!body || typeof body !== "object" || !("kunci_kirim" in body)
       || typeof body.kunci_kirim !== "string" || !/^[a-f0-9]{32}$/.test(body.kunci_kirim)) {
@@ -9,6 +11,15 @@ export function validasiPesanan(body: unknown) {
   if (!("item" in body) || !Array.isArray(body.item) || !body.item.length) {
     throw new KesalahanKatalog(400, "Keranjang masih kosong.");
   }
+
+  let metode_pembayaran: MetodePembayaran = "Bayar di kasir";
+  if ("metode_pembayaran" in body && body.metode_pembayaran !== undefined && body.metode_pembayaran !== "") {
+    if (body.metode_pembayaran !== "Bayar di kasir" && body.metode_pembayaran !== "Transfer bank") {
+      throw new KesalahanKatalog(400, "Pilih metode pembayaran Bayar di kasir atau Transfer bank.");
+    }
+    metode_pembayaran = body.metode_pembayaran;
+  }
+
   const ids = new Set<number>();
   const item = body.item.map((baris: unknown) => {
     if (!baris || typeof baris !== "object" || !("barang_id" in baris) || !("jumlah" in baris)) {
@@ -27,5 +38,5 @@ export function validasiPesanan(body: unknown) {
     ids.add(barang_id);
     return { barang_id, jumlah, satuan: "satuan" in baris ? baris.satuan : undefined };
   });
-  return { kunci: body.kunci_kirim, item };
+  return { kunci: body.kunci_kirim, metode_pembayaran, item };
 }

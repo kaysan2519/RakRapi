@@ -10,8 +10,14 @@ export const detailBarang: RequestHandler = async (req, res) => {
   res.json({ data });
 };
 
-export const daftarBarang: RequestHandler = async (_req, res) => {
-  const data = await barangService.ambilDaftarBarang();
+export const daftarBarang: RequestHandler = async (req, res) => {
+  const qMentah = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  const katMentah = typeof req.query.kategori_id === "string" ? req.query.kategori_id.trim() : "";
+  const kategoriId = katMentah ? bilanganBulat(katMentah, 1, "Kategori") : undefined;
+  const data = await barangService.ambilDaftarBarang({
+    q: qMentah || undefined,
+    kategoriId,
+  });
   res.json({ data });
 };
 
