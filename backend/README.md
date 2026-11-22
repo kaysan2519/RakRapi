@@ -56,11 +56,7 @@ Ikuti permintaan pegawai yang sudah masuk dan membuka `GET /api/barang/2`. Tiga 
 
 ## Autentikasi
 
-Di `.env`, `DB_USER` dan `DB_PASSWORD` memakai akun health.
-`AUTH_DB_USER` dan `AUTH_DB_PASSWORD` memakai akun MySQL `rakrapi_auth@localhost`.
-Hak akun auth hanya SELECT pada lima kolom `users` dan INSERT pada
-`nama`, `email`, `password_hash`. Isi `JWT_SECRET` dengan kunci acak privat
-minimal 32 byte. Saat demo, kirim permintaan ke `http://127.0.0.1:3000`.
+Di `.env`, seluruh modul backend memakai satu akun aplikasi (`DB_USER` & `DB_PASSWORD`) melalui satu pool Drizzle `db`. Isi `JWT_SECRET` dengan kunci acak privat minimal 32 byte, `JWT_EXPIRES_IN=1h`, dan `BCRYPT_SALT_ROUNDS=12`. Saat demo lokal, kirim permintaan ke `http://127.0.0.1:3000`.
 
 | Endpoint | Cara menggunakan |
 |---|---|
@@ -74,9 +70,9 @@ minimal 32 byte. Saat demo, kirim permintaan ke `http://127.0.0.1:3000`.
 
 Login di [akun.controller.ts](src/controllers/akun.controller.ts) memanggil
 `periksaLogin` di [akun.service.ts](src/services/akun.service.ts). Service membaca
-pengguna melalui `authDb` sesuai konfigurasi aktif, lalu memeriksa sandi dengan
+pengguna melalui satu pool Drizzle `db`, lalu memeriksa sandi dengan
 `bcrypt.compare`. `buatToken` menandatangani JWT memakai `JWT_SECRET` dari `.env`,
-algoritma **HS256**, issuer `rakrapi`, dan masa berlaku **1 jam (3.600 detik)**.
+algoritma **HS256**, issuer `rakrapi`, dan masa berlaku **`JWT_EXPIRES_IN` (`1h` / 3.600 detik)**.
 Payload hanya memuat `sub` (ID), `iss`, `iat`, dan `exp`; sandi/hash tidak dikirim.
 
 `idPenggunaDariToken` memanggil `jwt.verify` dengan daftar algoritma HS256,
@@ -129,23 +125,15 @@ atau dengan token tidak valid menghasilkan 401. Endpoint pemilik menghasilkan
 `nama_database` bernilai `rakrapi`. Sesudah uji, ada dua akun, nol kategori,
 dan nol barang.
 
-**Migration tiga peran.** Setelah skema awal, jalankan `database/03_role_warga.sql` dan `database/04_prosedur_pegawai.sql` pada database yang dipilih. Migration mengubah default dan pemeriksaan role untuk pendaftaran berikutnya. Untuk endpoint pegawai, isi `PEGAWAI_DB_USER` dan `PEGAWAI_DB_PASSWORD` dari akun localhost terpisah. Satu-satunya grant aplikasi untuk akun itu adalah `GRANT EXECUTE ON PROCEDURE rakrapi.tambah_pegawai TO 'rakrapi_pegawai'@'localhost'`. Prosedur menerima nama, email, dan hash lalu mengisi role pegawai sendiri.
+**Migration tiga peran & stored procedure.** Setelah skema awal, jalankan `database/03_role_warga.sql` dan `database/04_prosedur_pegawai.sql` pada database yang dipilih. Stored procedure `tambah_pegawai` tetap dipertahankan di database Laragon dan Aiven. Pada kode aplikasi sederhana saat ini, backend menggunakan satu pool Drizzle (`db`) dengan satu akun aplikasi (`rakrapi_app`), sedangkan pembatasan pembuatan pegawai dan register warga dijaga oleh middleware JWT `perluLogin` dan `perluRole("pemilik")`.
 
-Dari folder backend, jalankan `npm.cmd run build`, lalu `node --env-file=.env test/akun.cjs` untuk uji HTTP terisolasi. Tambahkan `emulator-5554` di akhir perintah untuk menguji formulir serta pemulihan sesi ketiga peran melalui Flutter. Runner menggunakan profil admin lokal MySQL `rakrapi` untuk membuat dan membersihkan database uji.
+Dari folder backend, jalankan `npm.cmd run build`, lalu `node --env-file=.env test/akun.cjs --uji-jwt` dan `node --env-file=.env test/akun.cjs --uji-pesanan` untuk uji HTTP terisolasi. Runner menggunakan profil admin lokal MySQL `rakrapi` hanya untuk membuat dan membersihkan database uji sementara tanpa menyentuh data asli.
 
-Akun demo lokal: `pegawai.uji@rakrapi.test` dan `pemilik.uji@rakrapi.test`.
-Sandi demo opsional disimpan pada bagian `DEMO_*` di `.env`. Git mengabaikan `.env`.
+Akun demo lokal yang sudah ada di database utama: `pegawai.uji@rakrapi.test` dan `pemilik.uji@rakrapi.test` (sandi tidak disimpan di Git).
 
-## Katalog dan foto lokal
+## Katalog dan foto privat
 
-Mulai MySQL Laragon di port 3306. Gunakan `.env` yang sudah disiapkan pada
-komputer ini. Akun `rakrapi_katalog@localhost` melalui `CATALOG_DB_USER` dan
-`CATALOG_DB_PASSWORD` mempunyai SELECT, INSERT, UPDATE, dan DELETE
-pada `rakrapi.kategori` dan `rakrapi.barang`. Pada database baru, jalankan `database/05_lowongan.sql`, lalu beri akun katalog hak berikut.
-
-```sql
-GRANT SELECT, INSERT (judul), UPDATE (aktif) ON rakrapi.lowongan TO 'rakrapi_katalog'@'localhost';
-```
+Mulai MySQL Laragon di port 3306 dan gunakan `backend/.env` aktif dengan satu akun aplikasi (`rakrapi_app` atau `root` Laragon) yang memiliki izin `SELECT, INSERT, UPDATE, DELETE` pada `rakrapi.*`. Pada database baru, jalankan `database/05_lowongan.sql` dan `database/06_pesanan.sql`.
 
 | Endpoint (awalan `/api`) | Akses | Hasil |
 |---|---|---|
@@ -162,13 +150,6 @@ GRANT SELECT, INSERT (judul), UPDATE (aktif) ON rakrapi.lowongan TO 'rakrapi_kat
 | GET /pesanan, GET /pesanan/:id | Ketiga peran | Warga hanya melihat pesanan sendiri. Toko dapat melihat semua pesanan |
 | PATCH /pesanan/:id/konfirmasi | Pemilik, pegawai | Konfirmasi dan kurangi stok di satu transaksi. Konfirmasi ulang mengembalikan status terakhir |
 
-Untuk instalasi baru, terapkan `database/06_pesanan.sql` setelah migration 05. Akun katalog memakai hak berikut pada kedua tabel baru.
-
-```sql
-GRANT SELECT, INSERT, UPDATE (status) ON rakrapi.pesanan TO 'rakrapi_katalog'@'localhost';
-GRANT SELECT, INSERT ON rakrapi.detail_pesanan TO 'rakrapi_katalog'@'localhost';
-```
-
 Harga satuan, nama barang, dan satuan disalin ke rincian ketika pesanan dibuat. Subtotal dibulatkan ke rupiah terdekat per baris, lalu dijumlahkan. Saat konfirmasi, service mengunci baris pesanan dan barang dalam urutan ID. Kekurangan stok membatalkan transaksi dan API mengirim 409 beserta nama barang. Jalankan `node --env-file=.env test/akun.cjs --uji-pesanan` dari folder ini untuk menguji aturan itu di MySQL terpisah.
 
 Untuk menambah barang, kirim `multipart/form-data` dengan `nama`,
@@ -179,17 +160,17 @@ stok kg boleh memiliki maksimal tiga desimal. Misalnya, stok `12` bersatuan
 PATCH menerima JSON, misalnya `{"harga_rupiah":20000,"stok":10}`. Untuk
 mengganti foto, gunakan PATCH multipart dengan file `foto` baru.
 
-Multer membatasi unggahan ke satu JPEG/PNG, maksimal 5 MiB. Selain MIME dan
-tanda format file, decoder gambar bawaan Windows (Windows PowerShell dan
-System.Drawing) memeriksa isi gambar serta batas 16 megapiksel. Backend
-menyimpan byte asli di `private/uploads/db-rakrapi/`; hanya `foto_key`
-tersimpan di tabel. Folder ini diabaikan Git dan hanya disajikan lewat
-endpoint yang memeriksa login.
+Multer membatasi unggahan ke satu JPEG/PNG, maksimal 5 MiB. Validasi gambar di
+[foto.validation.ts](src/validations/foto.validation.ts) memeriksa MIME, penanda file,
+batas 16 megapiksel, dan dekode ketat tanpa mengubah byte foto asli. Jika
+`CLOUDINARY_*` terisi di `.env`, foto disimpan privat (`type: "authenticated"`) di
+Cloudinary dan disajikan melalui `GET /api/barang/:id/foto` yang mewajibkan JWT.
+Saat pengujian lokal dengan `UPLOAD_DIR`, foto disimpan di folder sementara lokal.
 
 File baru ditulis sebelum referensinya disimpan di MySQL. Jika SQL gagal,
 backend memeriksa referensi sebelum membersihkan file baru. Untuk penggantian
 dan penghapusan, file lama dibersihkan setelah perubahan baris berhasil.
-Saat restart, backend memeriksa kembali file miliknya yang tidak dirujuk.
+Saat restart dalam mode lokal, `pulihkanFoto()` membersihkan file yatim yang tidak dirujuk.
 
 ### Mengulangi uji HTTP
 
@@ -197,11 +178,12 @@ Dari folder `backend` dengan MySQL Laragon aktif:
 
 ```powershell
 npm.cmd run build
+node --test test/koneksi.cjs
+node --test test/foto.cjs
+node --env-file=.env test/akun.cjs --uji-jwt
+node --env-file=.env test/akun.cjs --uji-pesanan
 node --env-file=.env --test test/katalog.cjs
 ```
 
-Uji memakai profil admin CLI MySQL `rakrapi` hanya untuk penyiapan dan
-pembersihan lingkungan uji. Nama database dan akun uji dibuat unik, foto
-masuk ke direktori sementara, sedangkan login memakai akun demo lokal.
-Uji memeriksa CRUD, hak akses, penolakan hapus kategori terpakai, data dan
-file salah, foto lama saat ubah harga/stok, serta isi foto setelah restart.
+Seluruh runner memakai database dan akun sementara yang dibuat lalu dihapus otomatis
+setelah selesai, sehingga data asli `rakrapi` tidak pernah berubah.

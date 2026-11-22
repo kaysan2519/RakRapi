@@ -48,6 +48,8 @@
 | Live Laragon (`rakrapi_app@localhost`, 1 pool `db` + Cloudinary privat) | Health 200, login 3 role 200/401/403, detail ID 2, foto ID 2 SHA-256 identik, CORS 204 | **LULUS** |
 | Live Aiven (`rakrapi_app@%`, `DB_SSL=true`, `DB_SSL_CA_BASE64`, `TLSv1.3` + Cloudinary privat) | Health 200, `periksa-aiven.cjs` TLS terverifikasi, login 3 role, detail ID 2, foto ID 2 SHA-256 identik | **LULUS** |
 | Integritas Data Asli, Backup, Stored Procedure, & Proyek Aiven Lain | `users=4`, `kategori=1`, `barang=1` (ID 2 Rp19.000, 12 botol), `defaultdb` & `money_tracker` utuh, `tambah_pegawai` utuh, 4 akun lama + `rakrapi_app` utuh, SHA-256 foto identik | **LULUS** |
+| Konkurensi Foto & Transaksi (`uji_konkurensi_akhir.cjs`, DB uji terisolasi) | 10/10 baca foto paralel 200 identik; edit harga + 6/6 baca foto 200 identik; ganti foto A→B + 8 baca paralel (`0` korup, `0` race 404, 1 file akhir fotoB); 3 kirim pesanan identik → 1 baris DB; 3 konfirmasi serentak → stok 10→7 tepat sekali | **LULUS** |
+| Build Android Release APK (`flutter build apk --release`) | `frontend/build/app/outputs/flutter-apk/app-release.apk` terbentuk (**50,38 MB**, SHA-256 `42C7853212850B5C0378DCE672A608C188AEA5AE51318AA4FE974E2AA6F84929`, default `http://127.0.0.1:3000/api`) | **LULUS** |
 
 ## 5. Bagian yang Belum Selesai / Belum Terverifikasi (Jujur & Transparan)
 
