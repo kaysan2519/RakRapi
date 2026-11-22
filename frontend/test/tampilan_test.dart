@@ -127,36 +127,71 @@ void main() {
   }
 
   testWidgets(
-    'Masuk memakai tema lokal, sandi dapat dilihat, kegagalan tetap ditampilkan',
+    'Masuk memakai tema lokal, password dapat dilihat, register pembeli tanpa pilih role',
     (tester) async {
+      String? namaDaftar, emailDaftar, sandiDaftar;
       await buka(
         tester,
         LayarMasuk(
           masuk: (_, _) async =>
               throw const KesalahanApi('Email atau sandi salah.'),
-          daftar: (_, _, _) async {},
+          daftar: (n, e, s) async {
+            namaDaftar = n;
+            emailDaftar = e;
+            sandiDaftar = s;
+          },
         ),
       );
       await simpanPratinjau(tester, 'masuk');
+      expect(find.text('Belum punya akun? '), findsOneWidget);
+      expect(find.text('Daftar sebagai pembeli'), findsOneWidget);
+      expect(find.text('Pilih role'), findsNothing);
       await tester.enterText(
         find.widgetWithText(TextField, 'Email'),
         'uji@example.test',
       );
       await tester.enterText(
-        find.widgetWithText(TextField, 'Sandi'),
+        find.widgetWithText(TextField, 'Password'),
         'sandi-uji',
       );
-      await tester.tap(find.byTooltip('Tampilkan sandi'));
+      await tester.tap(find.byTooltip('Tampilkan password'));
       await tester.pumpAndSettle();
       expect(
         tester
-            .widget<TextField>(find.widgetWithText(TextField, 'Sandi'))
+            .widget<TextField>(find.widgetWithText(TextField, 'Password'))
             .obscureText,
         isFalse,
       );
       await tester.tap(find.widgetWithText(FilledButton, 'Masuk'));
       await tester.pumpAndSettle();
       expect(find.text('Email atau sandi salah.'), findsOneWidget);
+
+      await tester.tap(find.text('Daftar sebagai pembeli'));
+      await tester.pumpAndSettle();
+      await simpanPratinjau(tester, 'daftar');
+      expect(find.widgetWithText(TextField, 'Nama Lengkap'), findsOneWidget);
+      expect(find.widgetWithText(TextField, 'Email'), findsOneWidget);
+      expect(find.widgetWithText(TextField, 'Password'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Daftar'), findsOneWidget);
+      expect(find.text('Pilih role'), findsNothing);
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Nama Lengkap'),
+        'Pembeli Uji',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Email'),
+        'pembeli@example.test',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Password'),
+        'sandi1234',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Daftar'));
+      await tester.pumpAndSettle();
+      expect(namaDaftar, 'Pembeli Uji');
+      expect(emailDaftar, 'pembeli@example.test');
+      expect(sandiDaftar, 'sandi1234');
+      expect(find.text('Akun pembeli dibuat. Silakan masuk.'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
 
 class FormAkun extends StatefulWidget {
-  const FormAkun({super.key, required this.judul, required this.simpan});
+  const FormAkun({
+    super.key,
+    required this.judul,
+    required this.simpan,
+    this.labelTombol = 'Simpan akun',
+    this.labelSibuk = 'Menyimpan…',
+  });
   final String judul;
   final Future<void> Function(String nama, String email, String sandi) simpan;
+  final String labelTombol;
+  final String labelSibuk;
 
   @override
   State<FormAkun> createState() => _FormAkunState();
@@ -14,6 +22,7 @@ class _FormAkunState extends State<FormAkun> {
   final email = TextEditingController();
   final sandi = TextEditingController();
   bool sibuk = false;
+  bool sembunyikanSandi = true;
   String? pesan;
 
   @override
@@ -30,7 +39,9 @@ class _FormAkunState extends State<FormAkun> {
     if (nama.text.trim().isEmpty ||
         email.text.trim().isEmpty ||
         sandi.text.length < 8) {
-      setState(() => pesan = 'Isi nama, email, dan sandi minimal 8 karakter.');
+      setState(
+        () => pesan = 'Isi nama lengkap, email, dan password minimal 8 karakter.',
+      );
       return;
     }
     setState(() {
@@ -56,47 +67,79 @@ class _FormAkunState extends State<FormAkun> {
     child: Scaffold(
       appBar: AppBar(title: Text(widget.judul)),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(24),
-          children: [
-            TextField(
-              controller: nama,
-              enabled: !sibuk,
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(labelText: 'Nama'),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: email,
-              enabled: !sibuk,
-              keyboardType: TextInputType.emailAddress,
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(labelText: 'Email'),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: sandi,
-              enabled: !sibuk,
-              obscureText: true,
-              autocorrect: false,
-              enableSuggestions: false,
-              decoration: const InputDecoration(labelText: 'Sandi'),
-              onSubmitted: (_) => kirim(),
-            ),
-            if (pesan != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text(
-                  pesan!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: nama,
+                    enabled: !sibuk,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Nama Lengkap',
+                      prefixIcon: Icon(Icons.person_outline),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: email,
+                    enabled: !sibuk,
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Email',
+                      prefixIcon: Icon(Icons.mail_outline),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: sandi,
+                    enabled: !sibuk,
+                    obscureText: sembunyikanSandi,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        tooltip: sembunyikanSandi
+                            ? 'Tampilkan password'
+                            : 'Sembunyikan password',
+                        onPressed: () => setState(
+                          () => sembunyikanSandi = !sembunyikanSandi,
+                        ),
+                        icon: Icon(
+                          sembunyikanSandi
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                        ),
+                      ),
+                    ),
+                    onSubmitted: (_) => kirim(),
+                  ),
+                  if (pesan != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Text(
+                        pesan!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 20),
+                  FilledButton(
+                    onPressed: sibuk ? null : kirim,
+                    child: Text(sibuk ? widget.labelSibuk : widget.labelTombol),
+                  ),
+                ],
               ),
-            const SizedBox(height: 20),
-            FilledButton(
-              onPressed: sibuk ? null : kirim,
-              child: Text(sibuk ? 'Menyimpan…' : 'Simpan akun'),
             ),
-          ],
+          ),
         ),
       ),
     ),

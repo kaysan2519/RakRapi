@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
@@ -133,6 +134,61 @@ void main() {
     expect(api.token, 'sesi-baru-fixture');
     expect(berakhir, 0);
   });
+
+  for (final role in ['pemilik', 'pegawai', 'warga']) {
+    testWidgets('Login $role dari satu layar Masuk mengarah ke dashboard sesuai role', (
+      tester,
+    ) async {
+      final api = RakRapiApi();
+      await http.runWithClient(
+        () async {
+          await tester.pumpWidget(RakRapi(api: api));
+          await tester.pumpAndSettle();
+          await tester.enterText(
+            find.widgetWithText(TextField, 'Email'),
+            '$role@rakrapi.test',
+          );
+          await tester.enterText(
+            find.widgetWithText(TextField, 'Password'),
+            'sandi-uji-123',
+          );
+          await tester.tap(find.widgetWithText(FilledButton, 'Masuk'));
+          await tester.pumpAndSettle();
+          expect(find.text('Katalog Barang'), findsOneWidget);
+          expect(
+            find.text('Tambah barang'),
+            role == 'warga' ? findsNothing : findsOneWidget,
+          );
+          expect(
+            find.byTooltip('Menu pemilik'),
+            role == 'pemilik' ? findsOneWidget : findsNothing,
+          );
+          expect(
+            find.text('Bansos'),
+            role == 'warga' ? findsOneWidget : findsNothing,
+          );
+          expect(await penyimpanan.getString('token'), tokenUji);
+        },
+        () => MockClient((request) async {
+          if (request.url.path.endsWith('/health')) {
+            return json({'status': 'ok', 'nama_database': 'rakrapi'});
+          }
+          if (request.url.path.endsWith('/auth/login')) {
+            return json({
+              'token': tokenUji,
+              'user': {
+                'id': 1,
+                'nama': 'Akun $role',
+                'email': '$role@rakrapi.test',
+                'role': role,
+              },
+            });
+          }
+          return json({'data': []});
+        }),
+      );
+    });
+  }
 
   for (final role in ['pemilik', 'pegawai', 'warga']) {
     testWidgets('Sesi $role dipulihkan lewat /me; keluar menghapus token', (

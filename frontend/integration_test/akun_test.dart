@@ -96,7 +96,11 @@ void main() {
         await tunggu(find.text(halaman));
       }
 
-      Future<void> isiForm(String nama, String email) async {
+      Future<void> isiForm(
+        String nama,
+        String email, {
+        String tombol = 'Simpan akun',
+      }) async {
         final kolom = find.descendant(
           of: find.byType(FormAkun),
           matching: find.byType(TextField),
@@ -105,15 +109,19 @@ void main() {
         await tester.enterText(kolom.at(0), nama);
         await tester.enterText(kolom.at(1), email);
         await tester.enterText(kolom.at(2), data['sandiBaru']);
-        await tekan(find.text('Simpan akun'));
+        await tekan(find.text(tombol));
       }
 
       await bukaLagi();
       if (find.byTooltip('Keluar').evaluate().isNotEmpty) {
         await tekan(find.byTooltip('Keluar'));
       }
-      await tekan(find.text('Daftar sebagai warga'));
-      await isiForm('Warga emulator', 'warga.emulator@rakrapi.test');
+      await tekan(find.text('Daftar sebagai pembeli'));
+      await isiForm(
+        'Warga emulator',
+        'warga.emulator@rakrapi.test',
+        tombol: 'Daftar',
+      );
       await masuk(
         'warga.emulator@rakrapi.test',
         data['sandiBaru'],

@@ -241,8 +241,12 @@ class _LayarMasukState extends State<LayarMasuk> {
     final terdaftar = await Navigator.push<String>(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            FormAkun(judul: 'Daftar sebagai warga', simpan: widget.daftar),
+        builder: (_) => FormAkun(
+          judul: 'Daftar sebagai pembeli',
+          simpan: widget.daftar,
+          labelTombol: 'Daftar',
+          labelSibuk: 'Mendaftar…',
+        ),
       ),
     );
     if (!mounted || terdaftar == null) return;
@@ -252,7 +256,7 @@ class _LayarMasukState extends State<LayarMasuk> {
       pesan = null;
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Akun warga dibuat. Silakan masuk.')),
+      const SnackBar(content: Text('Akun pembeli dibuat. Silakan masuk.')),
     );
   }
 
@@ -306,12 +310,12 @@ class _LayarMasukState extends State<LayarMasuk> {
                   autocorrect: false,
                   onSubmitted: (_) => kirim(),
                   decoration: InputDecoration(
-                    labelText: 'Sandi',
+                    labelText: 'Password',
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
                       tooltip: sembunyikanSandi
-                          ? 'Tampilkan sandi'
-                          : 'Sembunyikan sandi',
+                          ? 'Tampilkan password'
+                          : 'Sembunyikan password',
                       onPressed: () =>
                           setState(() => sembunyikanSandi = !sembunyikanSandi),
                       icon: Icon(
@@ -330,10 +334,21 @@ class _LayarMasukState extends State<LayarMasuk> {
                   child: Text(sibuk ? 'Memeriksa…' : 'Masuk'),
                 ),
                 const SizedBox(height: 16),
-                const Text('Belum punya akun?', textAlign: TextAlign.center),
-                TextButton(
-                  onPressed: sibuk ? null : daftar,
-                  child: const Text('Daftar sebagai warga'),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    const Text('Belum punya akun? '),
+                    TextButton(
+                      onPressed: sibuk ? null : daftar,
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text('Daftar sebagai pembeli'),
+                    ),
+                  ],
                 ),
               ],
             ),
