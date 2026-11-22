@@ -1,14 +1,14 @@
-# Diagram Sistem dan Pengujian Blackbox — RakRapi
+# Diagram Sistem dan Pengujian Blackbox — RakRapi (V3)
 
-> **Disinkronkan dengan implementasi akhir:** 22 November 2026 (`codex/ui-env-pixel8`)  
+> **Disinkronkan dengan implementasi akhir V3:** 22 November 2026 (`codex/ui-env-pixel8`)  
 > **Pengembang:** Muhammad Kaysan Ashraf — XI RPL 5 — SMK Taruna Bhakti (Uji Level KOKE & MAPIL 2026/2027)  
-> **Arsitektur aktif:** Flutter (Android) → REST API Express.js + TypeScript + Drizzle ORM (1 pool `db`, 1 file `.env`, JWT HS256 1 jam, `bcryptjs`, Cloudinary privat) → MySQL 8 (Laragon lokal & Aiven `TLSv1.3`).
+> **Arsitektur aktif:** Flutter (Android) → REST API Express.js + TypeScript + Drizzle ORM (1 pool `db`, 1 file `.env`, JWT HS256 1 jam, `bcryptjs`, Cloudinary privat) → MySQL 8 (Aiven `TLSv1.3` & Laragon lokal).
 
 ---
 
-## 1. Entity Relationship Diagram (ERD — 6 Tabel & 4 Foreign Key)
+## 1. Entity Relationship Diagram (ERD — 11 Tabel & 8 Foreign Key)
 
-Lampiran gambar ERD lengkap: [erd-rakrapi-lengkap.png](bukti/erd-rakrapi-lengkap.png).
+Migrasi non-destruktif `07_v3_fitur.sql` mempertahankan seluruh 6 tabel inti (`users`, `kategori`, `barang`, `lowongan`, `pesanan`, `detail_pesanan`), Primary Key, Foreign Key, stored procedure `tambah_pegawai`, serta seluruh data asli, dan menambahkan 5 tabel fitur Prototype V3 (`lamaran`, `program_bansos`, `pengajuan_bansos`, `pengumuman`, `info_toko`).
 
 ```mermaid
 erDiagram
@@ -30,15 +30,10 @@ erDiagram
         INT kategori_id FK "NOT NULL -> kategori.id (ON DELETE RESTRICT)"
         VARCHAR nama "NOT NULL (150)"
         INT harga_rupiah "NOT NULL UNSIGNED"
-        DECIMAL stok "NOT NULL (12,3; botol bulat, kg maks 3 desimal)"
-        VARCHAR satuan "NOT NULL (botol|kg)"
-        VARCHAR foto_key "NOT NULL (255, UUID.png / UUID.jpg)"
-    }
-
-    lowongan {
-        INT id PK "AUTO_INCREMENT UNSIGNED"
-        VARCHAR judul "NOT NULL (150)"
-        BOOLEAN aktif "NOT NULL DEFAULT true"
+        DECIMAL stok "NOT NULL (12,3; kg pecahan, lainnya bulat)"
+        VARCHAR satuan "NOT NULL (botol|kg|pcs|bungkus|pack|sisir|kotak|lembar|sachet)"
+        VARCHAR deskripsi "NOT NULL DEFAULT '' (500)"
+        VARCHAR foto_key "NOT NULL (255, UUID.png/.jpg/.webp)"
     }
 
     pesanan {
@@ -46,14 +41,16 @@ erDiagram
         INT warga_id FK "NOT NULL -> users.id (ON DELETE RESTRICT)"
         VARCHAR nama_pemesan "NOT NULL (100)"
         CHAR kunci_kirim UK "NOT NULL (32, UNIQUE bersama warga_id)"
-        ENUM status "Menunggu konfirmasi | Dikonfirmasi"
+        ENUM status "Menunggu konfirmasi|Dikonfirmasi|Siap diambil|Selesai"
+        ENUM metode_pembayaran "Bayar di kasir|Transfer bank"
+        ENUM status_pembayaran "Belum dibayar|Sudah dibayar"
         DECIMAL total_rupiah "NOT NULL (32,0)"
         DATETIME dibuat "NOT NULL DEFAULT CURRENT_TIMESTAMP"
     }
 
     detail_pesanan {
         INT id PK "AUTO_INCREMENT UNSIGNED"
-        INT pesanan_id FK "NOT NULL -> pesanan.id (ON DELETE CASCADE)"
+        INT pesanan_id FK "NOT NULL -> pesanan.id (ON DELETE RESTRICT)"
         INT barang_id FK "NULL -> barang.id (ON DELETE SET NULL)"
         VARCHAR nama_barang "NOT NULL (150)"
         VARCHAR satuan "NOT NULL (20)"
@@ -61,13 +58,88 @@ erDiagram
         INT harga_rupiah "NOT NULL UNSIGNED"
     }
 
+    lowongan {
+        INT id PK "AUTO_INCREMENT UNSIGNED"
+        VARCHAR judul "NOT NULL (150)"
+        VARCHAR deskripsi "NOT NULL (1000)"
+        VARCHAR persyaratan "NOT NULL (1000)"
+        VARCHAR lokasi "NOT NULL (150)"
+        VARCHAR info_tambahan "NOT NULL (150)"
+        VARCHAR foto_key "NULL (255)"
+        BOOLEAN aktif "NOT NULL DEFAULT true"
+        BOOLEAN is_pinned "NOT NULL DEFAULT false"
+        DATETIME dibuat "NOT NULL DEFAULT CURRENT_TIMESTAMP"
+    }
+
+    lamaran {
+        INT id PK "AUTO_INCREMENT UNSIGNED"
+        INT lowongan_id FK "NOT NULL -> lowongan.id (ON DELETE CASCADE)"
+        INT warga_id FK "NOT NULL -> users.id (ON DELETE RESTRICT)"
+        VARCHAR nama_pelamar "NOT NULL (100)"
+        VARCHAR keterangan "NOT NULL (1000)"
+        ENUM status "Menunggu verifikasi|Disetujui|Ditolak"
+        DATETIME dibuat "NOT NULL DEFAULT CURRENT_TIMESTAMP"
+    }
+
+    program_bansos {
+        INT id PK "AUTO_INCREMENT UNSIGNED"
+        VARCHAR nama "NOT NULL (150)"
+        VARCHAR deskripsi "NOT NULL (1000)"
+        VARCHAR jenis_bantuan "NOT NULL (150)"
+        VARCHAR persyaratan "NOT NULL (1000)"
+        INT kuota "NOT NULL UNSIGNED CHECK >= 1"
+        VARCHAR foto_key "NULL (255)"
+        BOOLEAN aktif "NOT NULL DEFAULT true"
+        BOOLEAN is_pinned "NOT NULL DEFAULT false"
+        DATETIME dibuat "NOT NULL DEFAULT CURRENT_TIMESTAMP"
+    }
+
+    pengajuan_bansos {
+        INT id PK "AUTO_INCREMENT UNSIGNED"
+        INT program_id FK "NOT NULL -> program_bansos.id (ON DELETE CASCADE)"
+        INT warga_id FK "NOT NULL -> users.id (ON DELETE RESTRICT)"
+        VARCHAR nama_pemohon "NOT NULL (100)"
+        VARCHAR keterangan "NOT NULL (1000)"
+        ENUM status "Menunggu verifikasi|Disetujui|Ditolak"
+        DATETIME dibuat "NOT NULL DEFAULT CURRENT_TIMESTAMP"
+    }
+
+    pengumuman {
+        INT id PK "AUTO_INCREMENT UNSIGNED"
+        VARCHAR judul "NOT NULL (150)"
+        VARCHAR deskripsi "NOT NULL (1000)"
+        ENUM jenis "Pengumuman|Diskon|Informasi toko"
+        VARCHAR info_tambahan "NOT NULL (150)"
+        VARCHAR foto_key "NULL (255)"
+        BOOLEAN aktif "NOT NULL DEFAULT true"
+        BOOLEAN is_pinned "NOT NULL DEFAULT false"
+        DATETIME dibuat "NOT NULL DEFAULT CURRENT_TIMESTAMP"
+    }
+
+    info_toko {
+        TINYINT id PK "CHECK (id = 1)"
+        VARCHAR nama_toko "NOT NULL (150)"
+        VARCHAR alamat "NOT NULL (300)"
+        VARCHAR jam_operasional "NOT NULL (150)"
+        VARCHAR kontak "NOT NULL (100)"
+        VARCHAR info_pengambilan "NOT NULL (300)"
+        VARCHAR nama_bank "NULL (100)"
+        VARCHAR nomor_rekening "NULL (50)"
+        VARCHAR nama_pemilik_rekening "NULL (150)"
+        DATETIME diperbarui "NOT NULL"
+    }
+
     kategori ||--o{ barang : "memiliki (fk_barang_kategori)"
     users ||--o{ pesanan : "membuat (pesanan_ibfk_1)"
     pesanan ||--|{ detail_pesanan : "memuat (detail_pesanan_ibfk_1)"
     barang ||--o{ detail_pesanan : "dirujuk (detail_pesanan_ibfk_2)"
+    lowongan ||--o{ lamaran : "menerima (fk_lamaran_lowongan)"
+    users ||--o{ lamaran : "mengajukan (fk_lamaran_warga)"
+    program_bansos ||--o{ pengajuan_bansos : "menerima (fk_pengajuan_program)"
+    users ||--o{ pengajuan_bansos : "mengajukan (fk_pengajuan_warga)"
 ```
 
-> **Catatan Database:** Stored procedure `tambah_pegawai` tetap dipertahankan pada database Laragon dan Aiven (`04_prosedur_pegawai.sql`) sampai verifikasi materi Basis Data selesai.
+> **Catatan Pin Prioritas:** Kolom boolean `is_pinned` berada langsung pada tabel asal (`lowongan`, `program_bansos`, `pengumuman`) sehingga endpoint `GET /api/pin` menggabungkan informasi terpin tanpa menduplikasi data.
 
 ---
 
@@ -76,41 +148,36 @@ erDiagram
 ```mermaid
 flowchart LR
     Pengunjung["Pengunjung"]
-    Warga["Warga (role: warga)"]
+    Warga["Pembeli (role: warga)"]
     Pegawai["Pegawai (role: pegawai)"]
     Pemilik["Pemilik Toko (role: pemilik)"]
 
-    subgraph RakRapi["Sistem RakRapi (REST API + Flutter)"]
-        UC1["Daftar Akun Warga (POST /api/auth/register)"]
-        UC2["Masuk / Login JWT HS256 (POST /api/auth/login)"]
-        UC3["Lihat Katalog, Detail & Foto Privat (GET /api/barang*)"]
-        UC4["Kelola Keranjang & Kirim Pesanan (POST /api/pesanan)"]
-        UC5["Lihat Pesanan Saya (GET /api/pesanan)"]
-        UC6["Lihat Lowongan Aktif & Tab Bansos (GET /api/lowongan)"]
-        UC7["Tambah & Ubah Barang + Upload Foto (POST/PATCH /api/barang)"]
-        UC8["Lihat & Konfirmasi Pesanan Masuk (PATCH /api/pesanan/:id/konfirmasi)"]
-        UC9["Kelola Kategori CRUD (GET/POST/PATCH/DELETE /api/kategori)"]
-        UC10["Hapus Barang (DELETE /api/barang/:id)"]
-        UC11["Tambah Akun Pegawai (POST /api/auth/pegawai)"]
-        UC12["Buka & Tutup Lowongan (POST/PATCH /api/lowongan)"]
+    subgraph RakRapi["Sistem RakRapi V3 (Flutter + REST API + Aiven MySQL)"]
+        UC1["Daftar Akun (POST /api/auth/register -> warga)"]
+        UC2["Masuk Satu Pintu JWT HS256 (POST /api/auth/login)"]
+        UC3["Beranda Pembeli: Info Toko, Pin Prioritas, Katalog, Cari & Filter"]
+        UC4["Keranjang & Checkout (Ambil di kasir, Bayar di kasir / Transfer)"]
+        UC5["Pantau Pesanan & Status Pembayaran Terpisah"]
+        UC6["Lowongan (Ajukan Lamaran), Bansos (Ajukan), Pengumuman"]
+        UC7["Dashboard Operasional, Kelola Produk & Stok + Upload Foto"]
+        UC8["Alur Pesanan: Konfirmasi -> Siap diambil -> Verifikasi Bayar -> Selesai"]
+        UC9["Dashboard Pemilik: Pin Informasi ke Beranda + Statistik Aktual"]
+        UC10["CRUD Kategori, Kelola Pegawai, Hapus Produk"]
+        UC11["CRUD Lowongan/Bansos/Pengumuman/Diskon + Verifikasi Pengajuan"]
+        UC12["Kelola Info Toko & Rekening Transfer Bank"]
     end
 
     Pengunjung --> UC1
     Pengunjung --> UC2
-
     Warga --> UC2
     Warga --> UC3
     Warga --> UC4
     Warga --> UC5
     Warga --> UC6
-
     Pegawai --> UC2
-    Pegawai --> UC3
     Pegawai --> UC7
     Pegawai --> UC8
-
     Pemilik --> UC2
-    Pemilik --> UC3
     Pemilik --> UC7
     Pemilik --> UC8
     Pemilik --> UC9
@@ -123,138 +190,117 @@ flowchart LR
 
 ## 3. Activity Diagram
 
-### A. Alur Tambah / Ubah Barang Beserta Upload Foto Privat
+### A. Alur Pesanan, Pengurangan Stok, & Verifikasi Pembayaran (Ambil di Kasir)
 
 ```mermaid
 flowchart TD
-    A["Pemilik / Pegawai buka Form Barang di Flutter"] --> B["Pilih kategori, isi nama, harga, stok, satuan, pilih foto via ImagePicker"]
-    B --> C["Kirim Multipart POST/PATCH /api/barang dengan Bearer JWT"]
-    C --> D{"Middleware perluLogin & perluRole(pemilik, pegawai)"}
-    D -- "Token tidak sah (401) / Role bukan toko (403)" --> E["Tolak permintaan & tampilkan pesan di Flutter"]
-    D -- "Sah" --> F["Multer terima 1 file foto maks 5 MiB (memoryStorage)"]
-    F --> G{"Validasi foto (MIME, penanda file, dekode ketat, <= 16 MP)"}
-    G -- "Tidak valid (413/415)" --> E
-    G -- "Valid" --> H["Validasi field barang (nama, kategori_id, harga, satuan, stok)"]
-    H -- "Tidak valid (400)" --> E
-    H -- "Valid" --> I["Simpan foto privat ke Cloudinary (authenticated) / folder lokal"]
-    I --> J["INSERT / UPDATE tabel barang via 1 pool Drizzle db"]
-    J -- "Error DB (FK / stok berubah)" --> K["Hapus foto yatim & kembalikan 400/409"]
-    J -- "Berhasil" --> L["Hapus foto lama jika diganti, lalu ambil detail INNER JOIN kategori"]
-    L --> M["Kembalikan JSON 201/200 ke Flutter & perbarui Katalog"]
+    A["Pembeli pilih barang & jumlah di Katalog / Detail"] --> B["Keranjang -> Checkout (Ambil di kasir + Metode Bayar)"]
+    B --> C{"Metode Transfer bank?"}
+    C -- "Rekening belum dikonfigurasi" --> D["Ditolak 400 (hanya Bayar di kasir aktif)"]
+    C -- "Valid (Tunai / Transfer terkonfigurasi)" --> E["POST /api/pesanan (kunci_kirim idempoten, hitung ulang total BigInt)"]
+    E --> F["Status: Menunggu konfirmasi | Pembayaran: Belum dibayar"]
+    F --> G["Pegawai/Pemilik: PATCH /pesanan/:id/konfirmasi (db.transaction + FOR UPDATE)"]
+    G -- "Stok kurang" --> H["Rollback utuh & kirim HTTP 409"]
+    G -- "Stok cukup" --> I["Kurangi stok atomik -> Status: Dikonfirmasi"]
+    I --> J["Pegawai/Pemilik: PATCH /pesanan/:id/siap -> Siap diambil"]
+    J --> K["Pembeli datang ke kasir (bayar tunai / tunjukkan bukti transfer)"]
+    K --> L["Pegawai/Pemilik: PATCH /pesanan/:id/bayar -> Sudah dibayar"]
+    L --> M["Pegawai/Pemilik: PATCH /pesanan/:id/selesai -> Selesai"]
 ```
 
-### B. Alur Pemesanan Warga hingga Konfirmasi Pengurangan Stok
+### B. Alur Pin Informasi Prioritas Pemilik ke Beranda Pembeli
 
 ```mermaid
 flowchart TD
-    A["Warga pilih barang & jumlah di Katalog Flutter"] --> B["Tambahkan ke Keranjang & cek total rupiah"]
-    B --> C["Tekan Kirim Pesanan (POST /api/pesanan + kunci_kirim 32 hex)"]
-    C --> D["Mulai transaksi db.transaction()"]
-    D --> E["Kunci baca barang & cek satuan, hitung subtotal akurat"]
-    E --> F["Simpan ke tabel pesanan (Menunggu konfirmasi) & detail_pesanan"]
-    F --> G["Pemilik / Pegawai buka Pesanan Masuk & tekan Konfirmasi"]
-    G --> H["PATCH /api/pesanan/:id/konfirmasi dalam db.transaction()"]
-    H --> I{"Cek status & kunci baris pesanan + barang (FOR UPDATE)"}
-    I -- "Sudah dikonfirmasi" --> J["Kembalikan status Dikonfirmasi tanpa potong stok dua kali"]
-    I -- "Stok kurang" --> K["Rollback transaksi seluruh item & kirim HTTP 409"]
-    I -- "Stok cukup" --> L["Kurangi barang.stok & ubah status pesanan menjadi Dikonfirmasi"]
-    L --> M["Commit transaksi; Warga melihat status Dikonfirmasi di Pesanan Saya"]
+    A["Pemilik buka Dashboard -> tekan Pin informasi ke beranda"] --> B["Pilih info yang ada atau buat baru (+ Lowongan / Diskon / Bansos / Pengumuman)"]
+    B --> C["Unggah foto opsional (JPG/PNG/WebP <= 5 MB) & aktifkan is_pinned"]
+    C --> D["Backend validasi foto (Sharp) -> simpan ke Cloudinary privat & MySQL Aiven"]
+    D --> E["Pembeli buka / refresh Beranda -> GET /api/pin"]
+    E --> F["Kartu Info Prioritas tampil paling atas beserta foto & tombol detail"]
 ```
 
 ---
 
-## 4. Class Diagram (Backend Express/Drizzle & Frontend Flutter)
+## 4. Class Diagram (Flutter V3 & Backend Express/Drizzle)
 
 ```mermaid
 classDiagram
     class RakRapiApi {
         +String alamat
         +String? token
-        +Function? saatSesiHabis
-        +cekKoneksi() Future~void~
-        +masuk(email, sandi) Future~Json~
-        +profil() Future~Json~
-        +daftarWarga(nama, email, sandi) Future~void~
-        +tambahPegawai(nama, email, sandi) Future~void~
-        +daftarBarang() Future~List~
-        +detail(id) Future~Json~
-        +foto(id) Future~Uint8List~
-        +simpanBarang(isian, id, gambar) Future~int~
-        +kirimPesanan(kunci, item) Future~Json~
-        +konfirmasiPesanan(id) Future~Json~
+        +masuk(email, sandi)
+        +daftarWarga(nama, email, sandi)
+        +daftarBarang(q, kategoriId)
+        +kategori()
+        +kirimPesanan(kunci, item, metodePembayaran)
+        +konfirmasiPesanan(id)
+        +siapDiambilPesanan(id)
+        +verifikasiPembayaranPesanan(id)
+        +selesaikanPesanan(id)
+        +simpanLowongan() / ajukanLamaran()
+        +daftarBansos() / ajukanBansos()
+        +daftarPengumuman() / daftarPin()
+        +infoToko() / perbaruiInfoToko()
+        +ringkasanDashboard()
     }
 
-    class RakRapiApp {
-        +RakRapiApi api
-        +SharedPreferencesAsync penyimpanan
-        +Json? pengguna
-        +pulihkanSesi()
-        +masuk()
-        +keluar()
+    class LayarAutentikasi {
+        +LayarMasuk
+        +FormAkun
     }
 
-    class LayarKatalogDanForm {
+    class ShellPembeli {
+        +BerandaWarga
+        +BerandaPembeliTab
         +DaftarBarang
-        +DetailBarang
-        +FormBarang
-        +LayarKategori
-        +Keranjang
-        +LayarPesanan
-        +LayarLowongan
+        +LayarKeranjang
+        +LayarCheckout
+        +DaftarPesanan
+        +AkunPembeliTab
     }
 
-    class KonfigurasiDb {
-        +opsiKoneksi(database) PoolOptions
-        +pool MySql2Pool
-        +db MySql2Database
+    class ShellPengelolaUI {
+        +ShellPengelola
+        +LayarPinPrioritas
+        +LayarLayananInfo
+        +DaftarKategori
+        +LayarPegawai
+        +LayarInfoToko
     }
 
-    class MiddlewareExpress {
-        +aturCors(req, res, next)
-        +perluLogin(req, res, next)
-        +perluRole(roles)
-        +terimaFoto(req, res, next)
-        +tanganiError(err, req, res, next)
+    class BackendServices {
+        +akun.service.ts
+        +kategori.service.ts
+        +barang.service.ts
+        +foto.service.ts
+        +pesanan.service.ts
+        +lowongan.service.ts
+        +bansos.service.ts
+        +pengumuman.service.ts
+        +info.service.ts
     }
 
-    class LayananBackend {
-        +akunService: daftarkanAkun, periksaLogin, ambilProfil, idPenggunaDariToken
-        +kategoriService: ambilDaftarKategori, tambahKategori, ubahKategori, hapusKategori
-        +barangService: ambilDaftarBarang, ambilDetailBarang, ambilFotoBarang, simpanBarang, hapusBarang
-        +fotoService: siapkanFoto, tulisFoto, bacaFoto, hapusJikaLepas
-        +lowonganService: daftarLowongan, bukaLowongan, tutupLowongan
-        +pesananService: buatPesanan, daftarPesanan, ambilPesanan, konfirmasiPesanan
-    }
-
-    RakRapiApp --> RakRapiApi : memakai
-    LayarKatalogDanForm --> RakRapiApi : memanggil REST API
-    RakRapiApi ..> MiddlewareExpress : HTTPS/HTTP JSON & Multipart + Bearer JWT
-    MiddlewareExpress --> LayananBackend : meneruskan request tervalidasi
-    LayananBackend --> KonfigurasiDb : query via 1 pool Drizzle db
+    LayarAutentikasi --> RakRapiApi
+    ShellPembeli --> RakRapiApi
+    ShellPengelolaUI --> RakRapiApi
+    RakRapiApi ..> BackendServices : HTTP JSON & Multipart + Bearer JWT
 ```
 
 ---
 
-## 5. Tabel Hasil Pengujian Blackbox Aktual (22 November 2026)
-
-Seluruh pengujian dijalankan terhadap backend hasil penyederhanaan (1 `.env`, 1 pool Drizzle `db`, 1 akun aplikasi `rakrapi_app`, JWT HS256 1 jam, Cloudinary privat) tanpa memodifikasi data asli:
+## 5. Tabel Hasil Pengujian Blackbox Aktual V3 (22 November 2026)
 
 | No | Modul | Skenario Pengujian | Hasil yang Diharapkan | Hasil Aktual | Status |
 |---:|---|---|---|---|---|
-| 1 | Build & Kualitas | `npm run build` (`tsc`) pada backend | Kompilasi TypeScript bersih tanpa error | Exit code 0, 0 error | **LULUS** |
-| 2 | Kualitas Flutter | `flutter analyze --no-pub` & `flutter test --no-pub` | 0 issue analisis, seluruh tes widget & sesi lulus | 0 issue; **18/18 tes lulus** (`sesi_test`, `keranjang_test`, `form_barang_test`, `tampilan_test`) | **LULUS** |
-| 3 | Koneksi Laragon | `GET /api/health` dengan 1 pool `db` (`rakrapi_app@localhost`, `DB_SSL=false`) | HTTP 200 `{"status":"ok","nama_database":"rakrapi"}` | HTTP 200 `{"status":"ok","nama_database":"rakrapi"}` | **LULUS** |
-| 4 | Koneksi Aiven TLS | `GET /api/health` & `periksa-aiven.cjs` (`rakrapi_app@%`, `DB_SSL=true`, `DB_SSL_CA_BASE64`) | HTTP 200, `TLSv1.3`, `rejectUnauthorized: true`, hanya 6 tabel `rakrapi` terlihat | HTTP 200, `TLSv1.3`, `tls_terverifikasi: true`, 6 tabel `rakrapi`, `defaultdb` & `money_tracker` terisolasi | **LULUS** |
-| 5 | Validasi TLS | Uji unit `test/koneksi.cjs` menolak Aiven dengan `DB_SSL=false`, CA kosong/invalid, port invalid | Melempar error sebelum membuka koneksi | 4/4 tes lulus (termasuk CORS `*` dan domain allowlist) | **LULUS** |
-| 6 | Register Warga | `POST /api/auth/register` dengan `role: "pemilik"` di body & email duplikat | HTTP 201 dipaksa `role: "warga"`, duplikat HTTP 409, password di-hash `bcryptjs` | 201 `warga`, duplikat 409, `bcrypt.compare` cocok | **LULUS** |
-| 7 | Login & JWT | `POST /api/auth/login` benar/salah pada Laragon & Aiven; uji 90 kasus HTTP di `test/jwt.cjs` | Login benar 200 (`HS256`, `exp=3600s`), sandi salah 401; token hilang/rusak/expired/`none`/secret salah/tanpa `exp` → 401 | **90/90 pemeriksaan HTTP JWT lulus**; login hash lama cost-10 tetap lulus | **LULUS** |
-| 8 | Otorisasi 3 Role | Akses endpoint `/auth/pemilik`, `/auth/pegawai`, `/kategori`, `/barang`, `/lowongan`, `/pesanan` oleh 3 role + perubahan role langsung di MySQL | Pemilik 200/201, pegawai & warga 403 pada rute terlarang; perubahan role di MySQL langsung berlaku tanpa token baru | Seluruh matriks 200/201/403 lulus; role terbaru terbaca live dari MySQL | **LULUS** |
-| 9 | CRUD Kategori | Pemilik tambah (201), duplikat (409), kosong (400), ubah (200), hapus kosong (204), hapus terpakai (409 `ON DELETE RESTRICT`) | Semua status tepat; kategori terpakai gagal dihapus | Seluruh skenario lulus; pesan penolakan 409 tampil tepat | **LULUS** |
-| 10 | CRUD Barang & JOIN | Tambah barang berfoto (201), baca daftar/detail `INNER JOIN kategori` (200), ubah harga/stok tanpa ganti foto (200), ubah satuan/foto (200), hapus barang oleh pemilik (204) vs pegawai (403) | `nama_kategori` tampil dari `INNER JOIN`, foto lama utuh jika tidak diganti, foto terhapus saat barang dihapus | 5/5 rangkaian `test/katalog.cjs` lulus (termasuk pemulihan file yatim saat restart) | **LULUS** |
-| 11 | Validasi & Foto Privat | Unggah PNG/JPEG valid, PNG korup, JPEG scan korup/kosong, MIME palsu, >5 MiB, >16 MP; baca foto ID 2 via Cloudinary privat pada Laragon & Aiven | Valid diterima byte identik; korup/palsu/>16 MP → 415; >5 MiB → 413; foto ID 2 privat 200 dengan SHA-256 identik | 4/4 `test/foto.cjs` lulus; foto ID 2 dari Cloudinary `2.200.991` byte SHA-256 identik (`D731582F...`) pada Laragon & Aiven | **LULUS** |
-| 12 | Lowongan | Pemilik buka (201) & tutup (204), warga baca aktif saja (200), pegawai/warga kelola (403) | Lowongan tertutup hilang di daftar warga, tetap tercatat bagi pemilik | Lulus di `test/akun.cjs` | **LULUS** |
-| 13 | Keranjang, Pesanan & Stok | Warga kirim pesanan (201, `kunci_kirim`), 2 petugas konfirmasi bersamaan (200, stok berkurang sekali), stok kurang (409 rollback utuh), lintas warga (404), harga lama tersimpan | Stok akhir akurat (`14→12` & `12.5→10`), tidak ada pengurangan ganda atau parsial, harga saat pesan tersimpan (`Rp19.000`, total `Rp73.000`) | Lulus penuh di `test/akun.cjs --uji-pesanan` | **LULUS** |
-| 14 | Integritas Data Asli | Audit read-only Laragon, Aiven (`rakrapi`, `defaultdb`, `money_tracker`), stored procedure `tambah_pegawai`, 4 akun lama, foto lokal & backup | Data asli 100% utuh, proyek lain di Aiven tidak tersentuh | `users=4`, `kategori=1`, `barang=1` (ID 2 Rp19.000, 12 botol), `defaultdb` & `money_tracker` identik, `tambah_pegawai` utuh, SHA-256 foto lokal = backup = Cloudinary | **LULUS** |
-| 15 | Konkurensi Foto & Transaksi | 10 baca foto paralel; edit harga + 6 baca foto paralel; ganti foto A→B + 8 baca foto paralel (tanpa `GET_LOCK`); 3 kirim pesanan identik (`kunci_kirim`); 3 konfirmasi pesanan serentak | Baca paralel 10/10 identik; edit harga tidak merusak foto; ganti foto berakhir konsisten 1 file foto B tanpa korup; pesanan tidak duplikat; stok terpotong tepat sekali (`10→7`) | 10/10 baca 200 identik; 6/6 baca saat edit harga 200 identik; ganti foto 200 (`8/8` fotoA, `0` race 404, `0` korup, akhir fotoB 1 file); `jumlahBarisPesanan=1`; stok akhir `7.000` | **LULUS** |
-| 16 | Audit Layar, Tombol & Navigasi Flutter | Pemeriksaan seluruh 10 layar, seluruh tombol/navigasi, dan uji widget/sesi untuk 3 role (`main`, `katalog`, `form_barang`, `form_akun`, `kategori`, `keranjang`, `pesanan`, `lowongan`) | Tidak ada tombol mati/palsu; tab Bansos jujur menampilkan status disiapkan tanpa form palsu; seluruh alur 3 role bekerja | `flutter analyze` 0 issue; **18/18 `flutter test` lulus**; 0 tombol palsu/mati ditemukan | **LULUS** |
-| 17 | Build Android Release APK | `flutter build apk --release` pada `frontend/` (tanpa `--no-pub` agar `GeneratedPluginRegistrant.java` bersih dari plugin test) | `app-release.apk` terbentuk utuh tanpa error kompilasi Gradle/Java | `app-release.apk` berhasil dibangun (**50,38 MB** / `52.826.453` byte; SHA-256 `42C7853212850B5C0378DCE672A608C188AEA5AE51318AA4FE974E2AA6F84929`; default `API_URL=http://127.0.0.1:3000/api`) | **LULUS** |
+| 1 | Build Backend | `npm.cmd run build` (`tsc`) | Kompilasi TypeScript 0 error | Exit code 0, 0 error | **LULUS** |
+| 2 | Migrasi & Idempotensi DB | Jalankan `07_v3_fitur.sql` + seed 2x pada DB isolasi, lalu terapkan ke Laragon & Aiven | 11 tabel terbentuk, 0 duplikasi saat seed ulang, ID 2 utuh, `defaultdb` & `money_tracker` utuh | Isolasi Run 1 = Run 2; Aiven & Laragon: 10 kategori, 18 produk, 3 lowongan, 2 bansos, 4 pengumuman, 1 info_toko; ID 2 utuh | **LULUS** |
+| 3 | Autentikasi & 3 Role | Register warga (tolak injeksi role), login 3 role, sandi salah 401, token invalid 401, lintas role 403 | Role register selalu `warga`, JWT HS256 valid, endpoint terlarang 403 | Lulus di 12/12 suite `uji_backend_v3.cjs` & verifikasi live Aiven | **LULUS** |
+| 4 | Kategori & Produk + Foto | CRUD kategori & produk, `?q=` & `?kategori_id=`, upload PNG/WebP, tolak file rusak 415, lindungi kategori terpakai 409 | Foto privat tersimpan & terbaca byte identik, edit teks tidak menghapus foto | Lulus di suite API isolasi & live Cloudinary Private (foto ID 2, produk baru, poster promo HTTP 200) | **LULUS** |
+| 5 | Pesanan & Pembayaran | Tolak qty 0/>stok, tolak Transfer saat rekening kosong (400), idempoten `kunci_kirim`, konfirmasi paralel tanpa potong stok 2x, tolak Selesai sebelum lunas (409), verifikasi bayar → Selesai | Stok berkurang tepat sekali, status pesanan & pembayaran terpisah, alur transfer aktif setelah rekening dikonfigurasi | Lulus penuh di `uji_backend_v3.cjs` (Test 7 & Test 8) | **LULUS** |
+| 6 | Lowongan & Lamaran | CRUD + foto + pin, ajukan lamaran, blokir duplikat (409) & lowongan tutup (409), review pemilik | Status `Menunggu verifikasi` → `Disetujui`/`Ditolak`, anti-duplikat DB UNIQUE | Lulus penuh di `uji_backend_v3.cjs` (Test 9) | **LULUS** |
+| 7 | Bansos & Kuota | CRUD program kuota=1, ajukan 2 warga, tolak duplikat (409), setujui 1, tolak persetujuan ke-2 karena kuota penuh (409) | Kuota dijaga secara transaksional (`FOR UPDATE`), tanpa NIK/penghasilan fiktif | Lulus penuh di `uji_backend_v3.cjs` (Test 10) | **LULUS** |
+| 8 | Pengumuman, Diskon & Pin | CRUD pengumuman & diskon berfoto, multi-pin lintas modul, lepas pin mempertahankan data asal, harga produk tidak berubah oleh diskon | `GET /api/pin` hanya menampilkan item terpin aktif, unpin menghapus dari beranda saja | Lulus di suite API & live Aiven (`2` item terpin tampil di beranda) | **LULUS** |
+| 9 | Dashboard Statistik | `GET /api/dashboard` untuk pemilik/pegawai vs warga (403) | Seluruh angka berasal dari `COUNT(*)` SQL aktual | Lulus (`jumlah_produk: 18, jumlah_kategori: 10, jumlah_pegawai: 1, jumlah_pin_aktif: 2`) | **LULUS** |
+| 10 | Flutter Analyze & Widget Tests | `flutter analyze --no-pub` & `flutter test --no-pub` | 0 issue lint, seluruh tes widget & sesi lulus | 0 issue; **20/20 tes Flutter lulus** (`sesi_test`, `tampilan_test`, `keranjang_test`, `form_barang_test`) | **LULUS** |
+| 11 | E2E Emulator Pixel 8 (Live Aiven) | Jalankan `v3_emulator_bukti_test.dart` pada `emulator-5554` terhubung backend Aiven + Cloudinary | Login/Register V3, Beranda Pembeli, Katalog, Detail ID 2, Dashboard Pemilik, Pin Prioritas, Dashboard Pegawai tampil tanpa error & overflow | Terverifikasi pada `Pixel_8` (`docs/bukti/v3-pixel8/01..08.png`) | **LULUS** |
+| 12 | Pengujian HP Fisik | Uji koneksi ADB pada HP fisik | Diuji bila perangkat terpasang | Perangkat HP fisik tidak terhubung saat sesi pengujian ini | **BELUM TERUJI DI HP FISIK** |

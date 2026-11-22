@@ -1,94 +1,229 @@
-# Panduan Penjelasan Kode RakRapi untuk Presentasi Ujian (XI RPL)
+# Panduan Presentasi & Pemahaman Kode RakRapi V3 (XI RPL)
 
 > **Pengembang:** Muhammad Kaysan Ashraf — XI RPL 5 — SMK Taruna Bhakti  
-> **Tujuan panduan:** Membantu menjelaskan alur aplikasi RakRapi dari Flutter → Express REST API → Drizzle ORM → MySQL dengan bahasa sederhana dan lokasi file yang tepat.
+> **Disinkronkan dengan source code V3:** 22 November 2026 (`codex/ui-env-pixel8`)  
+> **Tujuan:** Memudahkan siswa menjelaskan setiap bagian kode RakRapi kepada penguji KOKE & MAPIL dengan bahasa sederhana, lokasi file & nomor baris aktual, serta contoh tanya-jawab penguji.
 
 ---
 
-## 1. Gambaran Besar Alur Data RakRapi
+## 1. Gambaran Alur Sistem RakRapi V3
 
 ```text
-[Flutter Android]
-   │  Kirim HTTP JSON / Multipart + header "Authorization: Bearer <JWT>"
+[Flutter Android (3 Role: Pembeli/warga, Pegawai, Pemilik)]
+   │  HTTP JSON / Multipart + Header "Authorization: Bearer <JWT>"
    ▼
-[Express.js Backend — backend/src/app.ts]
-   ├─ 1. CORS (middleware/cors.middleware.ts)
-   ├─ 2. Routes (routes/*.routes.ts) + Middleware Auth & Role (middleware/akses.middleware.ts)
-   ├─ 3. Controller (controllers/*.controller.ts) → baca req.params / req.body / req.file
-   ├─ 4. Validasi (validations/*.validation.ts) → tolak input salah (400 / 413 / 415)
-   ├─ 5. Service (services/*.service.ts) → jalankan query Drizzle ORM & Cloudinary privat
-   └─ 6. Error Middleware (middleware/error.middleware.ts) → ubah error menjadi JSON status HTTP
+[Express.js REST API — backend/src/app.ts]
+   ├─ CORS (cors.middleware.ts)
+   ├─ Routes (routes/*.routes.ts) + Middleware Auth & Role (akses.middleware.ts)
+   ├─ Upload Multer (upload.middleware.ts) + Validasi (validations/*.validation.ts)
+   ├─ Controller (controllers/*.controller.ts) → baca req & kirim JSON status HTTP
+   ├─ Service (services/*.service.ts) → query Drizzle ORM + Cloudinary privat
+   └─ Error Handler (error.middleware.ts) → ubah error ke JSON yang aman
    ▼
-[1 Pool MySQL + Drizzle ORM — backend/src/config/db.ts & koneksi.ts]
-   ├─ Lokal (Laragon): DB_SSL=false
-   └─ Cloud (Aiven):   DB_SSL=true + DB_SSL_CA_BASE64 (TLSv1.3 terverifikasi)
+[1 Pool MySQL + Drizzle ORM — db.ts & koneksi.ts]
+   └─ MySQL Aiven (TLSv1.3 terverifikasi, akun non-admin rakrapi_app) & Laragon lokal
 ```
 
 ---
 
-## 2. Peta File Utama & Fungsi Singkatnya
+## 2. Bedah Kode Inti (Format 9 Poin untuk Penguji)
 
-### A. Konfigurasi Backend (Paling Sering Ditanya Penguji)
-1. **`backend/.env`** *(tidak diunggah ke Git; template di `backend/.env.example`)*
-   - Menyimpan seluruh pengaturan dalam **1 file sederhana**: `PORT`, koneksi MySQL (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SSL`, `DB_SSL_CA_BASE64`), `JWT_SECRET`, `JWT_EXPIRES_IN=1h`, `BCRYPT_SALT_ROUNDS=12`, kredensial `CLOUDINARY_*`, dan `CORS_ORIGIN`.
-2. **`backend/src/config/koneksi.ts`** *(baris 1–39)*
-   - Menyusun opsi koneksi `mysql2`.
-   - Jika `DB_SSL=false` → koneksi langsung ke MySQL Laragon lokal.
-   - Jika `DB_SSL=true` → men-decode sertifikat CA dari `DB_SSL_CA_BASE64` dan mengaktifkan `ssl: { ca, rejectUnauthorized: true, verifyIdentity: true }` agar koneksi ke Aiven selalu terenkripsi TLS dan terverifikasi.
-3. **`backend/src/config/db.ts`** *(baris 1–7)*
-   - Membuat **1 connection pool MySQL (`pool`)** dan membungkusnya dengan **1 instance Drizzle ORM (`db = drizzle(pool)`)** yang dipakai bersama oleh seluruh service.
-4. **`backend/src/config/schema.ts`** *(baris 1–54)*
-   - Memetakan 6 tabel MySQL (`users`, `kategori`, `barang`, `lowongan`, `pesanan`, `detail_pesanan`) ke objek TypeScript Drizzle ORM agar query aman dan terstruktur.
+### 2.1 Konfigurasi Database & Connection Pooling
+1. **Nama file:** `koneksi.ts` dan `db.ts`
+2. **Lokasi file:** `backend/src/config/koneksi.ts` dan `backend/src/config/db.ts`
+3. **Nomor baris aktual:** `koneksi.ts` baris `4–39`; `db.ts` baris `1–7`
+4. **Potongan kode inti:**
+```ts
+// backend/src/config/db.ts (baris 5-7)
+export const pool = createPool(opsiKoneksi());
+export const db = drizzle(pool);
+```
+5. **Fungsi kode:** Membaca 1 file `backend/.env` (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SSL`, `DB_SSL_CA_BASE64`), mengaktifkan verifikasi TLS CA saat terhubung ke Aiven, lalu membuat 1 connection pool `pool` yang dibungkus Drizzle ORM (`db`).
+6. **Alur input → output:** Input dari variabel `.env` → output objek `db` siap dipakai seluruh service.
+7. **Hubungan dengan database:** Menjadi pintu tunggal menuju MySQL `rakrapi` (Aiven `TLSv1.3` maupun Laragon lokal).
+8. **Contoh pertanyaan penguji:** *Bagaimana cara berpindah dari MySQL Laragon ke MySQL Aiven?*
+9. **Jawaban singkat:** Cukup ubah kredensial di satu file `backend/.env` dan set `DB_SSL=true` serta `DB_SSL_CA_BASE64`, tanpa mengubah kode aplikasi.
 
-### B. Autentikasi JWT, `bcryptjs`, & 3 Role
-5. **`backend/src/services/akun.service.ts`** *(baris 1–118)*
-   - **`daftarkanAkun()`** (baris 22–36): meng-hash sandi dengan `bcrypt.hash(password, saltRounds())` lalu menyimpan akun ke tabel `users` via `db.insert(users)`. Role ditentukan oleh route (`"warga"` untuk register publik, `"pegawai"` khusus rute pemilik), bukan dari input bebas pengguna.
-   - **`periksaLogin()`** (baris 38–50): mencari email di tabel `users`, mencocokkan sandi dengan `bcrypt.compare()`, lalu menerbitkan token JWT melalui `buatToken()`.
-   - **`buatToken()`** (baris 84–91): memanggil `jwt.sign({}, jwtSecret(), { algorithm: "HS256", subject: String(id), issuer: "rakrapi", expiresIn: "1h" })`.
-   - **`idPenggunaDariToken()`** (baris 93–118): membaca header `Authorization: Bearer <token>`, memverifikasi tanda tangan & masa berlaku token memakai `jwt.verify()`, dan mengembalikan ID pengguna.
-6. **`backend/src/middleware/akses.middleware.ts`** *(baris 1–30)*
-   - **`perluLogin`** (baris 5–20): memverifikasi JWT lalu mengambil **profil dan role terbaru dari tabel `users` MySQL** (`ambilProfil(idPengguna)`). Jika token tidak sah/kedaluwarsa → HTTP `401`.
-   - **`perluRole(...diizinkan)`** (baris 22–30): mengecek apakah `res.locals.user.role` termasuk role yang diizinkan pada endpoint tersebut. Jika tidak → HTTP `403`.
+### 2.2 Struktur Tabel, Primary Key, & Foreign Key
+1. **Nama file:** `schema.ts`, `01_skema.sql`–`07_v3_fitur.sql`
+2. **Lokasi file:** `backend/src/config/schema.ts` dan `backend/database/07_v3_fitur.sql`
+3. **Nomor baris aktual:** `schema.ts` baris `1–169`; `07_v3_fitur.sql` baris `1–116`
+4. **Potongan kode inti:**
+```ts
+// backend/src/config/schema.ts (baris 28-37)
+export const barang = mysqlTable("barang", {
+  id: int("id", { unsigned: true }).primaryKey().autoincrement(),
+  kategori_id: int("kategori_id", { unsigned: true }).notNull(),
+  nama: varchar("nama", { length: 150 }).notNull(),
+  harga_rupiah: int("harga_rupiah", { unsigned: true }).notNull(),
+  stok: decimal("stok", { precision: 12, scale: 3 }).notNull(),
+  satuan: varchar("satuan", { length: 20 }).notNull(),
+  deskripsi: varchar("deskripsi", { length: 500 }).notNull().default(""),
+  foto_key: varchar("foto_key", { length: 255 }).notNull(),
+});
+```
+5. **Fungsi kode:** Memetakan 11 tabel MySQL (`users`, `kategori`, `barang`, `pesanan`, `detail_pesanan`, `lowongan`, `lamaran`, `program_bansos`, `pengajuan_bansos`, `pengumuman`, `info_toko`) beserta PK/FK agar query Drizzle terstruktur.
+6. **Alur input → output:** Objek tabel dipakai oleh `db.select()`, `db.insert()`, `db.update()`, `db.delete()`.
+7. **Hubungan dengan database:** Sinkron 1:1 dengan struktur aktual MySQL Aiven & Laragon (8 Foreign Key + UNIQUE/CHECK constraint).
+8. **Contoh pertanyaan penguji:** *Apa fungsi Foreign Key `fk_barang_kategori` dengan `ON DELETE RESTRICT`?*
+9. **Jawaban singkat:** Mencegah kategori yang masih dipakai produk terhapus sembarangan sehingga data barang tidak kehilangan kategorinya.
 
-### C. Katalog, Relasi `INNER JOIN`, & Foto Privat Cloudinary
-7. **`backend/src/routes/barang.routes.ts`** → **`controllers/barang.controller.ts`** → **`services/barang.service.ts`**
-   - **`barangDenganKategori()`** (`barang.service.ts` baris 8–21): menggabungkan tabel `barang` dan `kategori` menggunakan `.innerJoin(kategori, eq(barang.kategori_id, kategori.id))` sehingga response langsung membawa `nama_kategori` (contoh: *Minyak goreng 1 L* → *Minyak Goreng*).
-   - **`simpanBarang()`** (`barang.service.ts` baris 43–96): memvalidasi foto terlebih dahulu (`siapkanFoto`), memvalidasi data barang, menyimpan foto, lalu menjalankan `INSERT`/`UPDATE` ke MySQL. Jika DB gagal, foto yatim otomatis dibersihkan.
-8. **`backend/src/services/foto.service.ts`** *(baris 1–176)*
-   - Menyimpan dan membaca foto produk secara **privat** (`type: "authenticated"`) di Cloudinary bila kredensial `CLOUDINARY_*` terisi (atau folder lokal bila `UPLOAD_DIR` dipakai saat pengujian lokal).
-   - Saat aplikasi meminta `GET /api/barang/:id/foto` dengan Bearer token, server membuat `private_download_url` bertanda tangan sementara (berlaku 60 detik), mengambil byte asli dari Cloudinary, lalu mengirimkannya ke Flutter.
-9. **`backend/src/validations/foto.validation.ts`** *(baris 1–61)*
-   - Memeriksa batas ukuran 5 MiB (`413`), kecocokan MIME & penanda file PNG/JPEG, batas 16 megapiksel, serta dekode gambar ketat tanpa mengubah byte foto asli.
+### 2.3 Routes, Controller, Service, Middleware, & Validation
+1. **Nama file:** `app.ts`, `*.routes.ts`, `*.controller.ts`, `*.service.ts`, `akses.middleware.ts`, `error.middleware.ts`, `*.validation.ts`
+2. **Lokasi file:** `backend/src/app.ts` dan subfolder `routes/`, `controllers/`, `services/`, `middleware/`, `validations/`
+3. **Nomor baris aktual:** `app.ts` baris `14–31`; `akses.middleware.ts` baris `5–30`; `error.middleware.ts` baris `20–43`
+4. **Potongan kode inti:**
+```ts
+// backend/src/app.ts (baris 17-29)
+app.use("/api/auth", express.json({ limit: "8kb" }), akunRouter);
+app.use("/api/kategori", express.json({ limit: "8kb" }), kategoriRouter);
+app.use("/api/barang", express.json({ limit: "16kb" }), barangRouter);
+app.use("/api/pesanan", express.json({ limit: "64kb" }), pesananRouter);
+app.use("/api/lowongan", express.json({ limit: "16kb" }), lowonganRouter);
+app.use("/api/bansos", express.json({ limit: "16kb" }), bansosRouter);
+app.use("/api/pengumuman", express.json({ limit: "16kb" }), pengumumanRouter);
+app.use("/api/pin", pinRouter);
+app.use("/api/toko", express.json({ limit: "16kb" }), tokoRouter);
+app.use("/api/dashboard", dashboardRouter);
+```
+5. **Fungsi kode:** Memisahkan tugas secara rapi: Route menentukan URL & hak role, Validation memeriksa format input, Controller membaca request & mengirim status HTTP, Service menjalankan logika + query database, Error Middleware mengubah error menjadi respons JSON aman tanpa stack trace.
+6. **Alur input → output:** Request HTTP → Middleware Auth/Role → Controller → Validation → Service → Response JSON (`200`/`201`/`204`/`400`/`401`/`403`/`404`/`409`).
+7. **Hubungan dengan database:** Hanya lapisan Service yang menyentuh objek `db` Drizzle ORM.
+8. **Contoh pertanyaan penguji:** *Mengapa logika database dipisah dari Controller ke Service?*
+9. **Jawaban singkat:** Supaya kode mudah dibaca, mudah diuji, dan satu fungsi service dapat dipakai ulang tanpa mengulang query di controller.
 
-### D. Pesanan & Transaksi Stok
-10. **`backend/src/services/pesanan.service.ts`** *(baris 1–95)*
-    - **`buatPesanan()`**: menyimpan pesanan dan menyalin harga satuan saat itu ke `detail_pesanan` di dalam satu transaksi `db.transaction()`.
-    - **`konfirmasiPesanan()`**: memakai transaksi database (`db.transaction()` + `.for("update")`) untuk mengecek seluruh stok item sebelum menguranginya. Jika satu barang stoknya kurang, seluruh transaksi otomatis dibatalkan (*rollback*, HTTP `409`) sehingga stok tidak pernah terpotong sebagian.
+### 2.4 Register, Login, `bcryptjs`, JWT, & Middleware Role
+1. **Nama file:** `akun.routes.ts`, `akun.controller.ts`, `akun.service.ts`, `akses.middleware.ts`
+2. **Lokasi file:** `backend/src/routes/akun.routes.ts`, `backend/src/services/akun.service.ts`, `backend/src/middleware/akses.middleware.ts`
+3. **Nomor baris aktual:** `akun.routes.ts` baris `12–17`; `akun.service.ts` baris `22–125`; `akses.middleware.ts` baris `5–30`
+4. **Potongan kode inti:**
+```ts
+// backend/src/routes/akun.routes.ts (baris 12-14)
+akunRouter.post("/register", buatAkun("warga"));
+akunRouter.get("/pegawai", perluLogin, perluRole("pemilik"), listPegawai);
+akunRouter.post("/pegawai", perluLogin, perluRole("pemilik"), buatAkun("pegawai"));
+```
+```ts
+// backend/src/services/akun.service.ts (baris 28-31 & 86-93)
+const hash = await bcrypt.hash(password, saltRounds());
+const [hasil] = await db.insert(users).values({ nama, email, passwordHash: hash, role });
+```
+5. **Fungsi kode:** Register publik selalu menetapkan role `warga` dan menyimpan password dalam bentuk hash `bcryptjs` (cost 12). Login mencocokkan sandi dengan `bcrypt.compare()` dan menerbitkan JWT `HS256` (masa berlaku 1 jam). `perluLogin` memverifikasi token lalu mengambil role terbaru dari tabel `users`, sedangkan `perluRole(...)` menolak role tidak berwenang dengan HTTP `403`.
+6. **Alur input → output:** `{ email, password }` → `200 { token, user }` (atau `401` bila salah).
+7. **Hubungan dengan database:** Membaca/menulis tabel `users` (kolom `email UNIQUE`, `password_hash`, `role`).
+8. **Contoh pertanyaan penguji:** *Apa yang terjadi jika pembeli mencoba mengirim `"role": "pemilik"` saat register?*
+9. **Jawaban singkat:** Diabaikan karena route `/api/auth/register` langsung memanggil `buatAkun("warga")`, bukan membaca role dari request client.
 
-### E. Frontend Flutter (Mengikuti 4 Artikel Medium Guru `divdannn`)
-11. **`frontend/lib/main.dart`**: menyimpan & memulihkan token JWT dengan `SharedPreferencesAsync`, mengecek sesi ke `GET /api/auth/me`, lalu mengarahkan layar sesuai role (`BerandaWarga` atau `DaftarBarang` pemilik/pegawai).
-12. **`frontend/lib/api.dart`**: membungkus seluruh permintaan `package:http` (JSON & `MultipartRequest` foto) dan menyisipkan header `Authorization: Bearer <token>` pada setiap endpoint privat.
-13. **`frontend/lib/form_barang.dart`**: memilih foto dengan `image_picker` (`ImagePicker().pickImage`), menampilkan pratinjau, lalu mengirim form tambah/ubah barang ke API.
+### 2.5 CRUD Kategori, Produk (`INNER JOIN`), Pencarian, & Filter
+1. **Nama file:** `kategori.service.ts`, `barang.service.ts`, `barang.validation.ts`
+2. **Lokasi file:** `backend/src/services/kategori.service.ts`, `backend/src/services/barang.service.ts`
+3. **Nomor baris aktual:** `kategori.service.ts` baris `6–19`; `barang.service.ts` baris `8–43`
+4. **Potongan kode inti:**
+```ts
+// backend/src/services/barang.service.ts (baris 8-22)
+return db.select({
+  id: barang.id, nama: barang.nama, kategori_id: kategori.id,
+  nama_kategori: kategori.nama, harga_rupiah: barang.harga_rupiah,
+  stok: barang.stok, satuan: barang.satuan, deskripsi: barang.deskripsi,
+}).from(barang).innerJoin(kategori, eq(barang.kategori_id, kategori.id));
+```
+5. **Fungsi kode:** Menggabungkan tabel `barang` dan `kategori` menggunakan `INNER JOIN`, mendukung pencarian teks `?q=` dan filter `?kategori_id=`, serta menghitung `jumlah_produk` pada daftar kategori menggunakan `LEFT JOIN` + `COUNT`.
+6. **Alur input → output:** `GET /api/barang?q=beras&kategori_id=3` → `200 { data: [...] }` lengkap dengan `nama_kategori`, `tersedia`, dan `foto_url`.
+7. **Hubungan dengan database:** Query relasional pada tabel `barang` dan `kategori`.
+8. **Contoh pertanyaan penguji:** *Dari mana asal `nama_kategori` pada kartu dan detail produk?*
+9. **Jawaban singkat:** Dari query `INNER JOIN` antara `barang.kategori_id` dan `kategori.id` di `barang.service.ts`.
+
+### 2.6 Upload Foto, Validasi, & Penyimpanan Cloudinary Privat
+1. **Nama file:** `upload.middleware.ts`, `foto.validation.ts`, `foto.service.ts`
+2. **Lokasi file:** `backend/src/middleware/upload.middleware.ts`, `backend/src/validations/foto.validation.ts`, `backend/src/services/foto.service.ts`
+3. **Nomor baris aktual:** `foto.validation.ts` baris `10–67`; `foto.service.ts` baris `69–145`
+4. **Potongan kode inti:**
+```ts
+// backend/src/services/foto.service.ts (baris 84-90 & 114-119)
+cloudinary.uploader.upload_stream(
+  { public_id: publicId, resource_type: "image", type: "authenticated", overwrite: false }, ...
+);
+const urlPrivat = cloudinary.utils.private_download_url(publicIdDariKey(key), ekstensi, {
+  resource_type: "image", type: "authenticated", expires_at: Math.floor(Date.now() / 1000) + 60,
+});
+```
+5. **Fungsi kode:** Multer menerima 1 file maks 5 MiB di memori, `periksaFoto()` memvalidasi penanda biner JPG/PNG/WebP + dekode ketat Sharp (maks 16 MP), lalu `tulisFoto()` mengunggah ke Cloudinary mode privat (`authenticated`) dan menyimpan nama UUID di kolom `foto_key`.
+6. **Alur input → output:** Multipart `foto` → tersimpan privat di Cloudinary → dibaca ulang lewat `/api/<modul>/:id/foto` dengan Bearer JWT.
+7. **Hubungan dengan database:** Kolom `foto_key` pada tabel `barang`, `lowongan`, `program_bansos`, dan `pengumuman`.
+8. **Contoh pertanyaan penguji:** *Mengapa foto tidak disimpan langsung di database atau URL publik?*
+9. **Jawaban singkat:** Menyimpan file biner di database membuat MySQL berat, sedangkan mode privat Cloudinary menjaga agar hanya pengguna login bertoken JWT yang bisa mengakses foto.
+
+### 2.7 Keranjang, Checkout (`Ambil di kasir`), Pembayaran, & Pengurangan Stok
+1. **Nama file:** `keranjang.dart`, `pesanan.service.ts`, `pesanan.routes.ts`
+2. **Lokasi file:** `frontend/lib/keranjang.dart` dan `backend/src/services/pesanan.service.ts`
+3. **Nomor baris aktual:** `pesanan.service.ts` baris `29–205`; `keranjang.dart` baris `296–450`
+4. **Potongan kode inti:**
+```ts
+// backend/src/services/pesanan.service.ts (baris 144-169)
+await db.transaction(async tx => {
+  const [data] = await tx.select().from(pesanan).where(eq(pesanan.id, id)).for("update");
+  if (data.status === "Dikonfirmasi") return;
+  for (const r of rincian) {
+    const [b] = await tx.select().from(barang).where(eq(barang.id, r.barang_id)).for("update");
+    if (Number(b.stok) < Number(r.jumlah)) throw new KesalahanKatalog(409, `Stok ${b.nama} tidak cukup.`);
+    await tx.update(barang).set({ stok: sql`${barang.stok} - ${r.jumlah}` }).where(eq(barang.id, b.id));
+  }
+  await tx.update(pesanan).set({ status: "Dikonfirmasi" }).where(eq(pesanan.id, id));
+});
+```
+5. **Fungsi kode:** Menghitung ulang total belanja di server dengan `BigInt` dari harga database (mengabaikan total dari client), mencegah pesanan ganda lewat `kunci_kirim`, memblokir transfer bank bila rekening toko belum diatur, memisahkan `status` pesanan (`Menunggu konfirmasi` → `Dikonfirmasi` → `Siap diambil` → `Selesai`) dan `status_pembayaran` (`Belum dibayar` → `Sudah dibayar`), serta melarang status `Selesai` sebelum pembayaran diverifikasi pegawai/pemilik.
+6. **Alur input → output:** `POST /api/pesanan` (`201`) → `PATCH /konfirmasi` (potong stok) → `PATCH /siap` → `PATCH /bayar` → `PATCH /selesai`.
+7. **Hubungan dengan database:** Tabel `pesanan`, `detail_pesanan`, `barang`, dan `info_toko`.
+8. **Contoh pertanyaan penguji:** *Bagaimana jika dua pegawai menekan Konfirmasi pada pesanan yang sama secara bersamaan?*
+9. **Jawaban singkat:** Karena memakai `db.transaction()` dan `.for("update")`, pegawai kedua menunggu kunci selesai lalu melihat status sudah `Dikonfirmasi`, sehingga stok tidak mungkin terpotong dua kali.
+
+### 2.8 Lowongan, Bansos, Pengumuman/Diskon, & Pin Informasi Prioritas
+1. **Nama file:** `lowongan.service.ts`, `bansos.service.ts`, `pengumuman.service.ts`, `info.service.ts`, `layanan_info.dart`
+2. **Lokasi file:** `backend/src/services/{lowongan,bansos,pengumuman,info}.service.ts` dan `frontend/lib/layanan_info.dart`
+3. **Nomor baris aktual:** `lowongan.service.ts` baris `133–180`; `bansos.service.ts` baris `143–245`; `info.service.ts` baris `28–80`
+4. **Potongan kode inti:**
+```ts
+// backend/src/services/info.service.ts (baris 28-45)
+const [daftarLow, daftarBan, daftarPeng] = await Promise.all([
+  db.select().from(lowongan).where(hanyaDipin ? and(eq(lowongan.aktif, true), eq(lowongan.is_pinned, true)) : undefined),
+  db.select().from(programBansos).where(hanyaDipin ? and(eq(programBansos.aktif, true), eq(programBansos.is_pinned, true)) : undefined),
+  db.select().from(pengumuman).where(hanyaDipin ? and(eq(pengumuman.aktif, true), eq(pengumuman.is_pinned, true)) : undefined),
+]);
+```
+5. **Fungsi kode:** Mengelola CRUD & verifikasi pengajuan Lowongan/Bansos (anti-duplikat `UNIQUE`, validasi kuota transaksional, tanpa NIK/penghasilan fiktif), Pengumuman & Diskon (diskon hanya informasi promo, tidak mengubah harga katalog), serta menggabungkan item `is_pinned = true` lintas 3 tabel ke bagian atas Beranda Pembeli tanpa duplikasi data.
+6. **Alur input → output:** Pemilik toggle `PATCH /:modul/:id/pin` → tersimpan di MySQL → Pembeli memanggil `GET /api/pin` dan langsung melihat kartu prioritas beserta fotonya.
+7. **Hubungan dengan database:** Tabel `lowongan`, `lamaran`, `program_bansos`, `pengajuan_bansos`, `pengumuman`, `info_toko`.
+8. **Contoh pertanyaan penguji:** *Apakah data lowongan diduplikasi saat pemilik menekan Pin ke beranda?*
+9. **Jawaban singkat:** Tidak. Kita cukup mengubah kolom boolean `is_pinned` menjadi `true` pada tabel asalnya, lalu `GET /api/pin` membaca item terpin dari ketiga tabel tersebut.
+
+### 2.9 Integrasi Flutter (API Client, Sesi JWT, 3 Dashboard Role)
+1. **Nama file:** `api.dart`, `main.dart`, `beranda_pembeli.dart`, `dashboard_pengelola.dart`
+2. **Lokasi file:** `frontend/lib/`
+3. **Nomor baris aktual:** `api.dart` baris `16–80`; `main.dart` baris `37–132`; `dashboard_pengelola.dart` baris `150–195`
+4. **Potongan kode inti:**
+```dart
+// frontend/lib/api.dart (baris 18-21 & 32-35)
+this.alamat = const String.fromEnvironment('API_URL', defaultValue: 'http://127.0.0.1:3000/api');
+if (privat && tokenPermintaan != null) {
+  request.headers['Authorization'] = 'Bearer $tokenPermintaan';
+}
+```
+5. **Fungsi kode:** Menyimpan token JWT dengan `SharedPreferencesAsync`, memulihkan sesi via `GET /api/auth/me`, mengarahkan 3 role dari satu layar Login ke `BerandaWarga` (5 tab) atau `ShellPengelola` (4 tab), serta mengirim semua request melalui `package:http` tanpa data dummy fallback.
+6. **Alur input → output:** Interaksi pengguna di Flutter → HTTP Request ke Express → Response JSON aktual MySQL Aiven → `setState` / `FutureBuilder` memperbarui layar.
+7. **Hubungan dengan database:** 100% data (akun, katalog, pesanan, pin, info toko, statistik dashboard) diambil langsung dari REST API yang membaca MySQL Aiven.
+8. **Contoh pertanyaan penguji:** *Bagaimana jika nanti backend sudah di-hosting ke internet dengan HTTPS?*
+9. **Jawaban singkat:** Tidak perlu merombak kode Flutter; cukup build ulang memakai `--dart-define=API_URL=https://domain-anda/api`.
 
 ---
 
-## 3. Contoh Pertanyaan Penguji & Cara Menjawab Singkat
+## 3. Penjelasan Teknik Lanjutan & Risiko Jika Dihilangkan
 
-1. **Mengapa hanya memakai 1 pool database di `db.ts`, apakah hak akses 3 role tetap aman?**
-   - *Jawab:* Aman, karena pembatasan role (`pemilik`, `pegawai`, `warga`) dijalankan di Express lewat middleware `perluLogin` dan `perluRole(...)` di `akses.middleware.ts`, yang mengecek JWT lalu membaca role terbaru langsung dari tabel `users`. Akun database production di Aiven juga tetap akun aplikasi terbatas `rakrapi_app` (bukan `avnadmin`).
-2. **Dari mana asal `nama_kategori` pada layar detail barang?**
-   - *Jawab:* Dari query `INNER JOIN` antara `barang.kategori_id` dan `kategori.id` di fungsi `barangDenganKategori()` pada `backend/src/services/barang.service.ts` baris 8–21.
-3. **Apa yang terjadi jika warga mengirim `"role": "pemilik"` saat register?**
-   - *Jawab:* Diabaikan. Route `POST /api/auth/register` (`akun.routes.ts` baris 12) memanggil `buatAkun("warga")` sehingga server selalu menyimpan role `warga`.
-4. **Bagaimana jika token JWT dipalsukan atau sudah lebih dari 1 jam?**
-   - *Jawab:* `jwt.verify()` di `akun.service.ts` menolak token dan `perluLogin` mengembalikan HTTP `401`, lalu Flutter di `main.dart` menghapus token dan mengembalikan pengguna ke layar Masuk.
-5. **Bagaimana aplikasi menjaga kategori yang masih dipakai barang agar tidak terhapus?**
-   - *Jawab:* Tabel `barang` memiliki Foreign Key `fk_barang_kategori ... ON DELETE RESTRICT` ke `kategori.id`. Saat MySQL menolak hapus (`ER_ROW_IS_REFERENCED`), `error.middleware.ts` mengembalikan HTTP `409` dengan pesan yang jelas.
-6. **Mengapa foto barang tidak langsung memakai URL publik?**
-   - *Jawab:* Foto disimpan dengan mode privat (`authenticated`) di Cloudinary dan hanya disajikan melalui endpoint `GET /api/barang/:id/foto` yang mewajibkan token JWT.
-7. **Bagaimana mencegah stok minus atau terpotong dua kali saat konfirmasi pesanan?**
-   - *Jawab:* `konfirmasiPesanan()` di `pesanan.service.ts` membungkus pengecekan stok, pengurangan stok, dan perubahan status ke dalam satu transaksi MySQL (`db.transaction()`). Jika stok salah satu barang tidak cukup, semua perubahan dibatalkan (*rollback*).
-8. **Bagaimana cara ganti koneksi antara Laragon lokal dan Aiven?**
-   - *Jawab:* Cukup ubah nilai di satu file `backend/.env` (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_SSL=true`, dan `DB_SSL_CA_BASE64`) tanpa mengubah source code.
-9. **Bagaimana cara menjelaskan `bcrypt` ketika `BCRYPT_SALT_ROUNDS` diubah dari 10 ke 12?**
-   - *Jawab:* `bcrypt.compare()` membaca jumlah salt rounds yang tersimpan di dalam string hash lama, sehingga akun lama tetap bisa login normal sementara akun baru otomatis memakai 12 rounds.
+| Teknik Lanjutan | Lokasi Penggunaan | Alasan Penggunaan | Risiko Jika Dihilangkan |
+|---|---|---|---|
+| **Database Transaction** (`db.transaction`) | `pesanan.service.ts`, `bansos.service.ts` | Memastikan seluruh operasi (cek stok + potong stok + ubah status) berhasil semua atau batal semua (*atomic*). | Jika barang ke-2 stoknya habis, barang ke-1 terlanjur terpotong sehingga stok rusak. |
+| **Row Locking** (`.for("update")` / `.for("share")`) | `pesanan.service.ts`, `bansos.service.ts` | Mengunci baris pesanan, barang, atau kuota bansos selama transaksi berjalan. | *Race condition*: 2 petugas mengonfirmasi bersamaan dapat memotong stok 2 kali atau melampaui kuota bansos. |
+| **`BigInt` Perhitungan Uang** | `pesanan.service.ts`, `keranjang.dart` | Menghitung subtotal & total rupiah presisi bulat tanpa error *floating-point* JavaScript. | Pembulatan `float` bisa selisih Rp1 atau salah hitung pada jumlah pecahan `kg`. |
+| **Idempotency (`kunci_kirim`)** | `pesanan.service.ts`, `keranjang.dart` | Kunci 32 hex unik per keranjang + `UNIQUE (warga_id, kunci_kirim)`. | Ketukan ganda saat sinyal lambat akan membuat 2 pesanan identik. |
+| **Unique & Check Constraints** | `01_skema.sql`–`07_v3_fitur.sql` | Menjaga email/kategori unik, stok `>= 0`, kuota `>= 1`, dan anti-duplikat lamaran/bansos di tingkat database. | Data korup (stok minus, lamaran ganda) tetap bisa masuk jika ada bug di aplikasi. |
+| **Validasi Foto Ketat (`sharp`)** | `foto.validation.ts` | Memastikan file benar-benar gambar JPG/PNG/WebP valid ≤ 16 MP sebelum disimpan. | File rusak atau skrip yang menyamar sebagai `.png` bisa lolos masuk ke penyimpanan. |
+| **Non-Destructive Migration** | `07_v3_fitur.sql`, `08_seed_demo_v3.sql` | Menambah kolom & tabel baru tanpa `DROP TABLE` / `TRUNCATE`. | Data asli toko (akun, produk ID 2, riwayat pesanan) akan hilang terhapus. |
