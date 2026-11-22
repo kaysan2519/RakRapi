@@ -11,7 +11,6 @@ import 'package:rakrapi/api.dart';
 import 'package:rakrapi/main.dart';
 import 'package:rakrapi/theme/app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-// Fake bawaan dependensi shared_preferences yang sudah terpasang, hanya untuk tes.
 // ignore: depend_on_referenced_packages
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 // ignore: depend_on_referenced_packages
@@ -28,6 +27,63 @@ void main() {
     status,
     headers: {'content-type': 'application/json'},
   );
+
+  http.Response responDefaultApi(http.Request request, String role) {
+    final p = request.url.path;
+    if (p.endsWith('/health')) {
+      return json({'status': 'ok', 'nama_database': 'rakrapi'});
+    }
+    if (p.endsWith('/auth/login')) {
+      return json({
+        'token': tokenUji,
+        'user': {
+          'id': 1,
+          'nama': 'Akun $role',
+          'email': '$role@rakrapi.test',
+          'role': role,
+        },
+      });
+    }
+    if (p.endsWith('/auth/me')) {
+      return json({
+        'user': {
+          'id': 1,
+          'nama': 'Uji $role',
+          'email': '$role@example.test',
+          'role': role,
+        },
+      });
+    }
+    if (p.endsWith('/dashboard')) {
+      return json({
+        'data': {
+          'jumlah_produk': 18,
+          'jumlah_kategori': 10,
+          'jumlah_pegawai': 1,
+          'stok_menipis': 0,
+          'pesanan_masuk': 0,
+          'pesanan_diproses': 0,
+          'pesanan_selesai': 0,
+          'jumlah_pin_aktif': 2,
+          'lamaran_menunggu': 0,
+          'bansos_menunggu': 0,
+        },
+      });
+    }
+    if (p.endsWith('/toko')) {
+      return json({
+        'data': {
+          'nama_toko': 'Toko Sembako RakRapi (Demo)',
+          'jam_operasional': 'Buka setiap hari · 07.00–21.00 (Demo)',
+          'alamat': '',
+          'kontak': '',
+          'info_pengambilan': 'Ambil di kasir toko.',
+          'rekening_tersedia': false,
+        },
+      });
+    }
+    return json({'data': []});
+  }
 
   setUp(() {
     SharedPreferencesAsyncPlatform.instance =
@@ -136,62 +192,44 @@ void main() {
   });
 
   for (final role in ['pemilik', 'pegawai', 'warga']) {
-    testWidgets('Login $role dari satu layar Masuk mengarah ke dashboard sesuai role', (
-      tester,
-    ) async {
-      final api = RakRapiApi();
-      await http.runWithClient(
-        () async {
-          await tester.pumpWidget(RakRapi(api: api));
-          await tester.pumpAndSettle();
-          await tester.enterText(
-            find.widgetWithText(TextField, 'Email'),
-            '$role@rakrapi.test',
-          );
-          await tester.enterText(
-            find.widgetWithText(TextField, 'Password'),
-            'sandi-uji-123',
-          );
-          await tester.tap(find.widgetWithText(FilledButton, 'Masuk'));
-          await tester.pumpAndSettle();
-          expect(find.text('Katalog Barang'), findsOneWidget);
-          expect(
-            find.text('Tambah barang'),
-            role == 'warga' ? findsNothing : findsOneWidget,
-          );
-          expect(
-            find.byTooltip('Menu pemilik'),
-            role == 'pemilik' ? findsOneWidget : findsNothing,
-          );
-          expect(
-            find.text('Bansos'),
-            role == 'warga' ? findsOneWidget : findsNothing,
-          );
-          expect(await penyimpanan.getString('token'), tokenUji);
-        },
-        () => MockClient((request) async {
-          if (request.url.path.endsWith('/health')) {
-            return json({'status': 'ok', 'nama_database': 'rakrapi'});
-          }
-          if (request.url.path.endsWith('/auth/login')) {
-            return json({
-              'token': tokenUji,
-              'user': {
-                'id': 1,
-                'nama': 'Akun $role',
-                'email': '$role@rakrapi.test',
-                'role': role,
-              },
-            });
-          }
-          return json({'data': []});
-        }),
-      );
-    });
+    testWidgets(
+      'Login $role dari satu layar Masuk mengarah ke dashboard V3 sesuai role',
+      (tester) async {
+        final api = RakRapiApi();
+        await http.runWithClient(
+          () async {
+            await tester.pumpWidget(RakRapi(api: api));
+            await tester.pumpAndSettle();
+            await tester.enterText(
+              find.widgetWithText(TextField, 'Email'),
+              '$role@rakrapi.test',
+            );
+            await tester.enterText(
+              find.widgetWithText(TextField, 'Password'),
+              'sandi-uji-123',
+            );
+            await tester.tap(find.widgetWithText(FilledButton, 'Masuk'));
+            await tester.pumpAndSettle();
+            if (role == 'pemilik') {
+              expect(find.text('Ringkasan toko'), findsOneWidget);
+              expect(find.text('Pin informasi ke beranda'), findsOneWidget);
+            } else if (role == 'pegawai') {
+              expect(find.text('Kelola operasional'), findsOneWidget);
+              expect(find.text('Pin informasi ke beranda'), findsNothing);
+            } else {
+              expect(find.text('Mau belanja apa hari ini?'), findsOneWidget);
+              expect(find.text('Info toko'), findsOneWidget);
+            }
+            expect(await penyimpanan.getString('token'), tokenUji);
+          },
+          () => MockClient((req) async => responDefaultApi(req, role)),
+        );
+      },
+    );
   }
 
   for (final role in ['pemilik', 'pegawai', 'warga']) {
-    testWidgets('Sesi $role dipulihkan lewat /me; keluar menghapus token', (
+    testWidgets('Sesi $role dipulihkan lewat /me; keluar lewat tab Akun menghapus token', (
       tester,
     ) async {
       await penyimpanan.setString('token', tokenUji);
@@ -202,36 +240,21 @@ void main() {
           await tester.pumpWidget(RakRapi(api: api));
           await tester.pumpAndSettle();
           expect(profilDibaca, 1);
-          expect(find.text('Katalog Barang'), findsOneWidget);
-          expect(
-            find.text('Tambah barang'),
-            role == 'warga' ? findsNothing : findsOneWidget,
-          );
-          expect(
-            find.byTooltip('Menu pemilik'),
-            role == 'pemilik' ? findsOneWidget : findsNothing,
-          );
-          await tester.tap(find.byTooltip('Keluar'));
+          await tester.tap(find.text('Akun'));
           await tester.pumpAndSettle();
-          expect(find.text('Masuk'), findsOneWidget);
+          await tester.tap(find.widgetWithText(OutlinedButton, 'Keluar'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.widgetWithText(FilledButton, 'Keluar'));
+          await tester.pumpAndSettle();
+          expect(find.text('Masuk ke Akun'), findsOneWidget);
           expect(find.text(pesanHabis), findsNothing);
           expect(await penyimpanan.getString('token'), isNull);
           expect(api.token, isNull);
         },
         () => MockClient((request) async {
           expect(request.headers['Authorization'], 'Bearer $tokenUji');
-          if (request.url.path.endsWith('/auth/me')) {
-            profilDibaca++;
-            return json({
-              'user': {
-                'id': 1,
-                'nama': 'Uji',
-                'email': 'uji@example.test',
-                'role': role,
-              },
-            });
-          }
-          return json({'data': []});
+          if (request.url.path.endsWith('/auth/me')) profilDibaca++;
+          return responDefaultApi(request, role);
         }),
       );
     });
@@ -248,11 +271,11 @@ void main() {
             await tester.pumpWidget(RakRapi(api: api));
             await tester.pumpAndSettle();
             if (!saatMemulihkan) {
-              expect(find.text('Katalog Barang'), findsOneWidget);
+              expect(find.text('Kelola operasional'), findsOneWidget);
               await expectLater(api.foto(2), throwsA(isA<KesalahanApi>()));
               await tester.pumpAndSettle();
             }
-            expect(find.text('Masuk'), findsOneWidget);
+            expect(find.text('Masuk ke Akun'), findsOneWidget);
             expect(find.text(pesanHabis), findsOneWidget);
             expect(await penyimpanan.getString('token'), isNull);
             expect(api.token, isNull);
@@ -261,10 +284,7 @@ void main() {
             if (saatMemulihkan || request.url.path.endsWith('/foto')) {
               return json({'pesan': 'Silakan masuk kembali.'}, 401);
             }
-            return json({
-              'user': {'id': 1, 'nama': 'Uji', 'role': 'pegawai'},
-              'data': [],
-            });
+            return responDefaultApi(request, 'pegawai');
           }),
         );
       },
@@ -287,14 +307,11 @@ void main() {
           offline = false;
           await tester.tap(find.text('Coba lagi'));
           await tester.pumpAndSettle();
-          expect(find.text('Katalog Barang'), findsOneWidget);
+          expect(find.text('Kelola operasional'), findsOneWidget);
         },
-        () => MockClient((_) async {
+        () => MockClient((req) async {
           if (offline) throw http.ClientException('offline');
-          return json({
-            'user': {'id': 1, 'nama': 'Uji', 'role': 'pegawai'},
-            'data': [],
-          });
+          return responDefaultApi(req, 'pegawai');
         }),
       );
     },

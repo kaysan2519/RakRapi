@@ -1,17 +1,23 @@
 import 'package:flutter/material.dart';
 
+import 'theme/app_theme.dart';
+
 class FormAkun extends StatefulWidget {
   const FormAkun({
     super.key,
     required this.judul,
     required this.simpan,
+    this.subjudul,
     this.labelTombol = 'Simpan akun',
     this.labelSibuk = 'Menyimpan…',
+    this.modeDaftar = false,
   });
   final String judul;
+  final String? subjudul;
   final Future<void> Function(String nama, String email, String sandi) simpan;
   final String labelTombol;
   final String labelSibuk;
+  final bool modeDaftar;
 
   @override
   State<FormAkun> createState() => _FormAkunState();
@@ -65,16 +71,49 @@ class _FormAkunState extends State<FormAkun> {
   Widget build(BuildContext context) => PopScope(
     canPop: !sibuk,
     child: Scaffold(
-      appBar: AppBar(title: Text(widget.judul)),
+      appBar: widget.modeDaftar
+          ? AppBar(
+              leading: IconButton(
+                tooltip: 'Kembali',
+                onPressed: sibuk ? null : () => Navigator.pop(context),
+                icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+              ),
+            )
+          : AppBar(title: Text(widget.judul)),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if (widget.modeDaftar) ...[
+                    const Center(child: LogoRakRapi(besar: true)),
+                    const SizedBox(height: 18),
+                    Text(
+                      widget.judul,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      widget.subjudul ??
+                          'Buat akun untuk mulai menggunakan RakRapi.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: teksRedup),
+                    ),
+                    const SizedBox(height: 24),
+                  ] else if (widget.subjudul != null) ...[
+                    Text(
+                      widget.subjudul!,
+                      style: const TextStyle(color: teksRedup),
+                    ),
+                    const SizedBox(height: 18),
+                  ],
                   TextField(
                     controller: nama,
                     enabled: !sibuk,
@@ -84,7 +123,7 @@ class _FormAkunState extends State<FormAkun> {
                       prefixIcon: Icon(Icons.person_outline),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   TextField(
                     controller: email,
                     enabled: !sibuk,
@@ -95,7 +134,7 @@ class _FormAkunState extends State<FormAkun> {
                       prefixIcon: Icon(Icons.mail_outline),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   TextField(
                     controller: sandi,
                     enabled: !sibuk,
@@ -104,6 +143,7 @@ class _FormAkunState extends State<FormAkun> {
                     enableSuggestions: false,
                     decoration: InputDecoration(
                       labelText: 'Password',
+                      helperText: 'Minimal 8 karakter',
                       prefixIcon: const Icon(Icons.lock_outline),
                       suffixIcon: IconButton(
                         tooltip: sembunyikanSandi
@@ -126,9 +166,7 @@ class _FormAkunState extends State<FormAkun> {
                       padding: const EdgeInsets.only(top: 12),
                       child: Text(
                         pesan!,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
+                        style: const TextStyle(color: merahPeringatan),
                       ),
                     ),
                   const SizedBox(height: 20),
@@ -136,6 +174,28 @@ class _FormAkunState extends State<FormAkun> {
                     onPressed: sibuk ? null : kirim,
                     child: Text(sibuk ? widget.labelSibuk : widget.labelTombol),
                   ),
+                  if (widget.modeDaftar) ...[
+                    const SizedBox(height: 16),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        const Text(
+                          'Sudah punya akun? ',
+                          style: TextStyle(color: teksRedup),
+                        ),
+                        TextButton(
+                          onPressed: sibuk ? null : () => Navigator.pop(context),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: const Text('Masuk'),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),

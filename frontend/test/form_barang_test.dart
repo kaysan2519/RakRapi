@@ -62,9 +62,9 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      final harga = find.widgetWithText(TextFormField, 'Harga per satuan');
+      final harga = find.widgetWithText(TextFormField, 'Harga per satuan (Rp)');
       await tester.enterText(harga, '4500');
-      final simpan = find.widgetWithText(FilledButton, 'Simpan');
+      final simpan = find.widgetWithText(FilledButton, 'Simpan produk');
       await tester.ensureVisible(simpan);
       await tester.tap(simpan);
       await tester.tap(simpan);

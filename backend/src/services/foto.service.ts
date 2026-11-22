@@ -69,7 +69,19 @@ export async function siapkanFoto(file: Express.Multer.File) {
   return { key, bytes: file.buffer };
 }
 
+// Cache memori sederhana untuk byte foto Cloudinary agar cepat saat katalog memuat banyak item.
+const cacheFoto = new Map<string, { bytes: Buffer; mime: string }>();
+
+function simpanCache(key: string, nilai: { bytes: Buffer; mime: string }) {
+  if (cacheFoto.size >= 40) {
+    const pertama = cacheFoto.keys().next().value;
+    if (pertama) cacheFoto.delete(pertama);
+  }
+  cacheFoto.set(key, nilai);
+}
+
 export async function tulisFoto(foto: { key: string; bytes: Buffer }) {
+  cacheFoto.delete(foto.key);
   if (!memakaiCloudinary()) {
     const folder = folderLokal();
     await mkdir(folder, { recursive: true });
@@ -108,6 +120,11 @@ export async function bacaFoto(key: string) {
     }
   }
 
+  const tersimpan = cacheFoto.get(key);
+  if (tersimpan) {
+    return tersimpan;
+  }
+
   siapkanCloudinary();
   // Buat URL unduh privat bertanda tangan (berlaku 60 detik) lalu baca dari server.
   const urlPrivat = cloudinary.utils.private_download_url(publicIdDariKey(key), ekstensi, {
@@ -115,19 +132,26 @@ export async function bacaFoto(key: string) {
     type: "authenticated",
     expires_at: Math.floor(Date.now() / 1000) + 60,
   });
-  let respons: Response;
-  try {
-    respons = await fetch(urlPrivat, { signal: AbortSignal.timeout(15000) });
-  } catch {
-    throw new KesalahanKatalog(503, "Penyimpanan foto belum tersedia.");
+  let respons: Response | undefined;
+  for (let percobaan = 0; percobaan < 2; percobaan++) {
+    try {
+      respons = await fetch(urlPrivat, { signal: AbortSignal.timeout(30000) });
+      if (respons.ok || respons.status === 404) break;
+    } catch {
+      if (percobaan === 1) {
+        throw new KesalahanKatalog(503, "Penyimpanan foto belum tersedia.");
+      }
+    }
   }
-  if (respons.status === 404) {
+  if (!respons || respons.status === 404) {
     throw new KesalahanKatalog(404, "Foto tidak ditemukan.");
   }
   if (!respons.ok) {
     throw new KesalahanKatalog(503, "Penyimpanan foto belum tersedia.");
   }
-  return { bytes: Buffer.from(await respons.arrayBuffer()), mime };
+  const hasil = { bytes: Buffer.from(await respons.arrayBuffer()), mime };
+  simpanCache(key, hasil);
+  return hasil;
 }
 
 async function masihDipakai(key: string): Promise<boolean> {
@@ -148,6 +172,7 @@ export async function hapusJikaLepas(key: string | null | undefined) {
   if (await masihDipakai(key)) {
     return;
   }
+  cacheFoto.delete(key);
 
   if (memakaiCloudinary()) {
     siapkanCloudinary();

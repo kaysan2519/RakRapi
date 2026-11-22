@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart';
+import 'beranda_pembeli.dart';
+import 'dashboard_pengelola.dart';
 import 'form_akun.dart';
 import 'katalog.dart';
 import 'keranjang.dart';
-import 'lowongan.dart';
+import 'pesanan.dart';
 import 'theme/app_theme.dart';
-import 'widgets/keadaan_kosong.dart';
 
 void main() => runApp(const RakRapi());
 
@@ -54,6 +55,7 @@ class _RakRapiState extends State<RakRapi> {
     final token = sesi['token'] as String;
     await penyimpanan.setString('token', token);
     api.token = token;
+    api.bersihkanCacheFoto();
     if (mounted) {
       setState(() {
         pengguna = sesi['user'] as Json;
@@ -64,6 +66,7 @@ class _RakRapiState extends State<RakRapi> {
 
   Future<void> keluar({bool sesiHabis = false}) async {
     api.token = null;
+    api.bersihkanCacheFoto();
     await penyimpanan.remove('token');
     if (!mounted) return;
     navigasi.currentState?.popUntil((route) => route.isFirst);
@@ -83,16 +86,22 @@ class _RakRapiState extends State<RakRapi> {
       layar = Scaffold(
         body: SafeArea(
           child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(masalahSesi!),
-                TextButton(
-                  onPressed: pulihkanSesi,
-                  child: const Text('Coba lagi'),
-                ),
-                TextButton(onPressed: keluar, child: const Text('Keluar')),
-              ],
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const LogoRakRapi(),
+                  const SizedBox(height: 16),
+                  Text(masalahSesi!, textAlign: TextAlign.center),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: pulihkanSesi,
+                    child: const Text('Coba lagi'),
+                  ),
+                  TextButton(onPressed: keluar, child: const Text('Keluar')),
+                ],
+              ),
             ),
           ),
         ),
@@ -104,20 +113,25 @@ class _RakRapiState extends State<RakRapi> {
         pesanSesi: pesanMasuk,
       );
     } else if (pengguna!['role'] == 'warga') {
-      layar = BerandaWarga(api: api, nama: pengguna!['nama'], keluar: keluar);
+      layar = BerandaWarga(
+        api: api,
+        pengguna: pengguna!,
+        nama: pengguna!['nama'].toString(),
+        keluar: keluar,
+      );
     } else if (pengguna!['role'] == 'pemilik' ||
         pengguna!['role'] == 'pegawai') {
-      layar = DaftarBarang(api: api, role: pengguna!['role'], keluar: keluar);
+      layar = ShellPengelola(api: api, pengguna: pengguna!, keluar: keluar);
     } else {
       layar = Scaffold(
         appBar: AppBar(
           title: const Text('Akun'),
           actions: [TextButton(onPressed: keluar, child: const Text('Keluar'))],
         ),
-        body: SafeArea(
+        body: const SafeArea(
           child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: const Text('Peran akun tidak dikenal.'),
+            padding: EdgeInsets.all(24),
+            child: Text('Peran akun tidak dikenal.'),
           ),
         ),
       );
@@ -138,9 +152,11 @@ class BerandaWarga extends StatefulWidget {
     required this.api,
     required this.nama,
     required this.keluar,
+    this.pengguna,
   });
   final RakRapiApi api;
   final String nama;
+  final Json? pengguna;
   final VoidCallback keluar;
 
   @override
@@ -149,49 +165,109 @@ class BerandaWarga extends StatefulWidget {
 
 class _BerandaWargaState extends State<BerandaWarga> {
   int tab = 0;
+  int? kategoriFilter;
+  bool fokusCari = false;
   final keranjang = Keranjang();
 
+  void bukaKatalog({int? kategoriId, bool fokusCari = false}) {
+    setState(() {
+      kategoriFilter = kategoriId;
+      this.fokusCari = fokusCari;
+      tab = 1;
+    });
+  }
+
   @override
-  Widget build(BuildContext context) => Scaffold(
-    body: switch (tab) {
-      0 => DaftarBarang(
-        api: widget.api,
-        role: 'warga',
-        keluar: widget.keluar,
-        keranjang: keranjang,
-      ),
-      1 => LayarLowongan(api: widget.api, pemilik: false),
-      _ => Scaffold(
-        appBar: AppBar(title: const Text('Bantuan sosial')),
-        body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: KeadaanKosong(
-              ikon: Icons.volunteer_activism_outlined,
-              judul: 'Layanan bansos sedang disiapkan',
-              penjelasan:
-                  'Halo, ${widget.nama}. Pengajuan dan riwayat bantuan belum tersedia. Kamu tetap bisa berbelanja melalui Katalog.',
-            ),
+  Widget build(BuildContext context) {
+    final userObj =
+        widget.pengguna ?? {'nama': widget.nama, 'email': '', 'role': 'warga'};
+    final jumlahKeranjang = keranjang.totalItemJenis;
+
+    return Scaffold(
+      body: switch (tab) {
+        0 => BerandaPembeliTab(
+          api: widget.api,
+          nama: widget.nama,
+          keranjang: keranjang,
+          onBukaKatalog: bukaKatalog,
+          onBukaKeranjang: () => setState(() => tab = 2),
+          onKeranjangBerubah: () => setState(() {}),
+        ),
+        1 => DaftarBarang(
+          api: widget.api,
+          role: 'warga',
+          keluar: widget.keluar,
+          keranjang: keranjang,
+          kategoriAwalId: kategoriFilter,
+          fokusCari: fokusCari,
+          onKeranjangBerubah: () => setState(() {}),
+          onBukaKeranjang: () => setState(() => tab = 2),
+        ),
+        2 => LayarKeranjang(
+          api: widget.api,
+          keranjang: keranjang,
+          onMulaiBelanja: () => bukaKatalog(),
+          onBerubah: () => setState(() {}),
+          onPesananSelesaiBuat: (_) => setState(() => tab = 3),
+        ),
+        3 => DaftarPesanan(
+          api: widget.api,
+          toko: false,
+          onBelanjaSekarang: () => bukaKatalog(),
+        ),
+        _ => AkunPembeliTab(
+          api: widget.api,
+          pengguna: userObj,
+          keluar: widget.keluar,
+        ),
+      },
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: tab,
+        onDestinationSelected: (index) => setState(() {
+          if (index == 1) {
+            kategoriFilter = null;
+            fokusCari = false;
+          }
+          tab = index;
+        }),
+        destinations: [
+          const NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: 'Beranda',
           ),
-        ),
+          const NavigationDestination(
+            icon: Icon(Icons.grid_view_outlined),
+            selectedIcon: Icon(Icons.grid_view_rounded),
+            label: 'Katalog',
+          ),
+          NavigationDestination(
+            icon: Badge(
+              isLabelVisible: jumlahKeranjang > 0,
+              label: Text('$jumlahKeranjang'),
+              child: const Icon(Icons.shopping_bag_outlined),
+            ),
+            selectedIcon: Badge(
+              isLabelVisible: jumlahKeranjang > 0,
+              label: Text('$jumlahKeranjang'),
+              child: const Icon(Icons.shopping_bag),
+            ),
+            label: 'Keranjang',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.receipt_long_outlined),
+            selectedIcon: Icon(Icons.receipt_long),
+            label: 'Pesanan',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: 'Akun',
+          ),
+        ],
       ),
-    },
-    bottomNavigationBar: NavigationBar(
-      selectedIndex: tab,
-      onDestinationSelected: (index) => setState(() => tab = index),
-      destinations: const [
-        NavigationDestination(icon: Icon(Icons.storefront), label: 'Katalog'),
-        NavigationDestination(
-          icon: Icon(Icons.work_outline),
-          label: 'Lowongan',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.volunteer_activism_outlined),
-          label: 'Bansos',
-        ),
-      ],
-    ),
-  );
+    );
+  }
 }
 
 class LayarMasuk extends StatefulWidget {
@@ -214,6 +290,7 @@ class _LayarMasukState extends State<LayarMasuk> {
   bool sibuk = false;
   bool sembunyikanSandi = true;
   String? pesan;
+
   @override
   void dispose() {
     email.dispose();
@@ -242,10 +319,12 @@ class _LayarMasukState extends State<LayarMasuk> {
       context,
       MaterialPageRoute(
         builder: (_) => FormAkun(
-          judul: 'Daftar sebagai pembeli',
+          judul: 'Daftar Akun',
+          subjudul: 'Buat akun untuk mulai menggunakan RakRapi.',
           simpan: widget.daftar,
           labelTombol: 'Daftar',
           labelSibuk: 'Mendaftar…',
+          modeDaftar: true,
         ),
       ),
     );
@@ -256,7 +335,7 @@ class _LayarMasukState extends State<LayarMasuk> {
       pesan = null;
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Akun pembeli dibuat. Silakan masuk.')),
+      const SnackBar(content: Text('Akun berhasil dibuat. Silakan masuk.')),
     );
   }
 
@@ -265,35 +344,29 @@ class _LayarMasukState extends State<LayarMasuk> {
     body: SafeArea(
       child: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 420),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Icon(
-                  Icons.storefront_outlined,
-                  size: 56,
-                  color: hijauUtama,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'RakRapi',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 48),
+                const Center(child: LogoRakRapi(besar: true)),
+                const SizedBox(height: 18),
                 Text(
                   'Masuk ke Akun',
+                  textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w800,
+                    letterSpacing: -0.4,
                   ),
                 ),
-                const SizedBox(height: 8),
-                const Text('Kelola toko, belanja, dan akses layanan RakRapi.'),
-                const SizedBox(height: 28),
+                const SizedBox(height: 6),
+                const Text(
+                  'Akses layanan RakRapi dengan akun Anda.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: teksRedup),
+                ),
+                const SizedBox(height: 22),
                 TextField(
                   controller: email,
                   keyboardType: TextInputType.emailAddress,
@@ -303,7 +376,7 @@ class _LayarMasukState extends State<LayarMasuk> {
                     prefixIcon: Icon(Icons.mail_outline),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 TextField(
                   controller: sandi,
                   obscureText: sembunyikanSandi,
@@ -328,17 +401,20 @@ class _LayarMasukState extends State<LayarMasuk> {
                 ),
                 if (pesan != null || widget.pesanSesi != null)
                   PesanGagal(pesan ?? widget.pesanSesi!),
-                const SizedBox(height: 20),
+                const SizedBox(height: 18),
                 FilledButton(
                   onPressed: sibuk ? null : kirim,
                   child: Text(sibuk ? 'Memeriksa…' : 'Masuk'),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 Wrap(
                   alignment: WrapAlignment.center,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    const Text('Belum punya akun? '),
+                    const Text(
+                      'Belum punya akun? ',
+                      style: TextStyle(color: teksRedup),
+                    ),
                     TextButton(
                       onPressed: sibuk ? null : daftar,
                       style: TextButton.styleFrom(
@@ -346,9 +422,19 @@ class _LayarMasukState extends State<LayarMasuk> {
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                      child: const Text('Daftar sebagai pembeli'),
+                      child: const Text('Daftar'),
                     ),
                   ],
+                ),
+                const SizedBox(height: 18),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(18),
+                  child: Image.asset(
+                    'assets/images/ilustrasi_toko.webp',
+                    height: 165,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                  ),
                 ),
               ],
             ),

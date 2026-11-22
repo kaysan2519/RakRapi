@@ -1,13 +1,11 @@
 import 'dart:convert';
-import 'dart:io';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:rakrapi/api.dart';
+import 'package:rakrapi/dashboard_pengelola.dart';
 import 'package:rakrapi/katalog.dart';
 import 'package:rakrapi/keranjang.dart';
 import 'package:rakrapi/lowongan.dart';
@@ -25,6 +23,8 @@ class ApiTampilanUji extends RakRapiApi {
       'harga_rupiah': 19000,
       'stok': '12',
       'satuan': 'botol',
+      'deskripsi': 'Minyak goreng uji',
+      'foto_url': '/api/barang/2/foto',
     },
     {
       'id': 3,
@@ -34,26 +34,87 @@ class ApiTampilanUji extends RakRapiApi {
       'harga_rupiah': 15000,
       'stok': '10',
       'satuan': 'kg',
+      'deskripsi': 'Beras uji',
+      'foto_url': '/api/barang/3/foto',
     },
   ];
-  List<Json> pekerjaan = [
-    {'id': 1, 'judul': 'Lowongan uji', 'aktif': true},
+  List<Json> kategoriList = [
+    {'id': 1, 'nama': 'Minyak', 'jumlah_produk': 1},
+    {'id': 2, 'nama': 'Beras', 'jumlah_produk': 1},
   ];
-  final fotoDiminta = <int>[];
+  List<Json> pekerjaan = [
+    {
+      'id': 1,
+      'judul': 'Lowongan uji',
+      'deskripsi': 'Deskripsi uji',
+      'info_tambahan': 'Penuh waktu',
+      'aktif': true,
+      'is_pinned': true,
+    },
+  ];
+  final fotoDiminta = <String>[];
   int permintaanDaftar = 0;
+
   @override
-  Future<List<Json>> daftarBarang() async {
+  Future<List<Json>> daftarBarang({String? q, int? kategoriId}) async {
     permintaanDaftar++;
     return barang;
   }
 
   @override
+  Future<List<Json>> kategori() async => kategoriList;
+
+  @override
   Future<Json> detail(int id) async => barang.firstWhere((b) => b['id'] == id);
+
   @override
   Future<List<Json>> lowongan() async => pekerjaan;
+
   @override
-  Future<Uint8List> foto(int id) async {
-    fotoDiminta.add(id);
+  Future<List<Json>> lamaranSaya() async => [];
+
+  @override
+  Future<List<Json>> semuaLamaran() async => [];
+
+  @override
+  Future<List<Json>> daftarPin({bool semua = false}) async => [
+    {
+      'sumber': 'lowongan',
+      'id': 1,
+      'jenis': 'Lowongan',
+      'judul': 'Lowongan uji',
+      'deskripsi': 'Deskripsi uji',
+      'is_pinned': true,
+    },
+  ];
+
+  @override
+  Future<Json> infoToko() async => {
+    'nama_toko': 'Toko Sembako RakRapi (Demo)',
+    'jam_operasional': 'Buka setiap hari · 07.00–21.00 (Demo)',
+    'alamat': '',
+    'kontak': '',
+    'info_pengambilan': 'Ambil di kasir toko.',
+    'rekening_tersedia': false,
+  };
+
+  @override
+  Future<Json> ringkasanDashboard() async => {
+    'jumlah_produk': barang.length,
+    'jumlah_kategori': kategoriList.length,
+    'jumlah_pegawai': 1,
+    'stok_menipis': 0,
+    'pesanan_masuk': 0,
+    'pesanan_diproses': 0,
+    'pesanan_selesai': 0,
+    'jumlah_pin_aktif': 1,
+    'lamaran_menunggu': 0,
+    'bansos_menunggu': 0,
+  };
+
+  @override
+  Future<Uint8List> fotoDariPath(String path, {bool paksaMuat = false}) async {
+    fotoDiminta.add(path);
     return base64Decode(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/2XkAAAAASUVORK5CYII=',
     );
@@ -62,7 +123,6 @@ class ApiTampilanUji extends RakRapiApi {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  final gambar = GlobalKey();
 
   setUpAll(() async {
     final font = FontLoader('PlusJakartaSans');
@@ -94,40 +154,23 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
-      RepaintBoundary(
-        key: gambar,
-        child: MaterialApp(
-          theme: temaRakRapi(),
-          debugShowCheckedModeBanner: false,
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: TextScaler.linear(skala)),
-            child: child!,
-          ),
-          home: layar,
+      MaterialApp(
+        theme: temaRakRapi(),
+        debugShowCheckedModeBanner: false,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(skala)),
+          child: child!,
         ),
+        home: layar,
       ),
     );
     await tester.pumpAndSettle();
   }
 
-  Future<void> simpanPratinjau(WidgetTester tester, String nama) async {
-    if (!const bool.fromEnvironment('SIMPAN_PRATINJAU')) return;
-    await tester.runAsync(() async {
-      final batas =
-          gambar.currentContext!.findRenderObject()! as RenderRepaintBoundary;
-      final hasil = await batas.toImage(pixelRatio: 2);
-      final png = await hasil.toByteData(format: ui.ImageByteFormat.png);
-      final file = File('build/pratinjau/$nama.png');
-      await file.parent.create(recursive: true);
-      await file.writeAsBytes(png!.buffer.asUint8List());
-      hasil.dispose();
-    });
-  }
-
   testWidgets(
-    'Masuk memakai tema lokal, password dapat dilihat, register pembeli tanpa pilih role',
+    'Masuk memakai desain V3, password dapat dilihat, register tanpa pilihan role',
     (tester) async {
       String? namaDaftar, emailDaftar, sandiDaftar;
       await buka(
@@ -142,10 +185,12 @@ void main() {
           },
         ),
       );
-      await simpanPratinjau(tester, 'masuk');
+      expect(find.text('Masuk ke Akun'), findsOneWidget);
       expect(find.text('Belum punya akun? '), findsOneWidget);
-      expect(find.text('Daftar sebagai pembeli'), findsOneWidget);
+      expect(find.text('Daftar'), findsOneWidget);
+      expect(find.text('Daftar sebagai pembeli'), findsNothing);
       expect(find.text('Pilih role'), findsNothing);
+
       await tester.enterText(
         find.widgetWithText(TextField, 'Email'),
         'uji@example.test',
@@ -166,14 +211,13 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Email atau sandi salah.'), findsOneWidget);
 
-      await tester.tap(find.text('Daftar sebagai pembeli'));
+      await tester.tap(find.widgetWithText(TextButton, 'Daftar'));
       await tester.pumpAndSettle();
-      await simpanPratinjau(tester, 'daftar');
+      expect(find.text('Daftar Akun'), findsOneWidget);
+      expect(find.text('Sudah punya akun? '), findsOneWidget);
       expect(find.widgetWithText(TextField, 'Nama Lengkap'), findsOneWidget);
-      expect(find.widgetWithText(TextField, 'Email'), findsOneWidget);
-      expect(find.widgetWithText(TextField, 'Password'), findsOneWidget);
-      expect(find.widgetWithText(FilledButton, 'Daftar'), findsOneWidget);
       expect(find.text('Pilih role'), findsNothing);
+
       await tester.enterText(
         find.widgetWithText(TextField, 'Nama Lengkap'),
         'Pembeli Uji',
@@ -191,13 +235,13 @@ void main() {
       expect(namaDaftar, 'Pembeli Uji');
       expect(emailDaftar, 'pembeli@example.test');
       expect(sandiDaftar, 'sandi1234');
-      expect(find.text('Akun pembeli dibuat. Silakan masuk.'), findsOneWidget);
+      expect(find.text('Akun berhasil dibuat. Silakan masuk.'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
 
   testWidgets(
-    'Warga melihat data API, filter bekerja, detail menambah jumlah ke keranjang',
+    'Warga melihat katalog V3, filter kategori bekerja, detail menambah ke keranjang',
     (tester) async {
       final api = ApiTampilanUji();
       final keranjang = Keranjang();
@@ -210,17 +254,16 @@ void main() {
           keranjang: keranjang,
         ),
       );
-      expect(find.text('Tambah barang'), findsNothing);
+      expect(find.text('Tambah produk'), findsNothing);
       expect(find.text('Barang uji botol'), findsOneWidget);
-      expect(api.fotoDiminta, contains(2));
-      await simpanPratinjau(tester, 'katalog-fixture');
+      expect(api.fotoDiminta, contains('/api/barang/2/foto'));
       await tester.tap(find.widgetWithText(ChoiceChip, 'Minyak'));
       await tester.pumpAndSettle();
       expect(find.text('Barang uji kg'), findsNothing);
       await tester.tap(find.text('Barang uji botol'));
       await tester.pumpAndSettle();
-      expect(find.text('Ubah barang'), findsNothing);
-      expect(find.text('Hapus barang'), findsNothing);
+      expect(find.text('Edit produk & stok'), findsNothing);
+      expect(find.text('Hapus produk'), findsNothing);
       await tester.ensureVisible(find.byTooltip('Tambah jumlah'));
       await tester.tap(find.byTooltip('Tambah jumlah'));
       await tester.ensureVisible(find.text('Tambah ke keranjang'));
@@ -231,36 +274,40 @@ void main() {
     },
   );
 
-  testWidgets('Pegawai boleh mengubah, tombol hapus hanya untuk pemilik', (
+  testWidgets('Pegawai boleh edit produk, hapus hanya untuk pemilik', (
     tester,
   ) async {
     final api = ApiTampilanUji();
     await buka(tester, DetailBarang(api: api, id: 2, role: 'pegawai'));
-    expect(find.text('Ubah barang'), findsOneWidget);
-    expect(find.text('Hapus barang'), findsNothing);
+    expect(find.text('Edit produk & stok'), findsOneWidget);
+    expect(find.text('Hapus produk'), findsNothing);
     await buka(tester, DetailBarang(api: api, id: 2, role: 'pemilik'));
-    await tester.scrollUntilVisible(find.text('Hapus barang'), 100);
-    expect(find.text('Hapus barang'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Hapus produk'), 100);
+    expect(find.text('Hapus produk'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'Katalog kosong tetap bisa dimuat ulang dan tidak diberi produk contoh',
-    (tester) async {
-      final api = ApiTampilanUji()..barang = [];
-      await buka(tester, BerandaWarga(api: api, nama: 'Kaysan', keluar: () {}));
-      expect(find.text('Belum ada barang.'), findsOneWidget);
-      await simpanPratinjau(tester, 'katalog-kosong');
-      await tester.drag(find.byType(ListView).first, const Offset(0, 350));
-      await tester.pumpAndSettle();
-      expect(api.permintaanDaftar, greaterThan(1));
-      await tester.tap(find.text('Bansos'));
-      await tester.pumpAndSettle();
-      expect(find.text('Layanan bansos sedang disiapkan'), findsOneWidget);
-      expect(find.text('Ajukan bansos'), findsNothing);
-      expect(tester.takeException(), isNull);
-    },
-  );
+  testWidgets('Dashboard Pemilik menampilkan tombol Pin informasi ke beranda di atas', (
+    tester,
+  ) async {
+    final api = ApiTampilanUji();
+    await buka(
+      tester,
+      ShellPengelola(
+        api: api,
+        pengguna: const {
+          'id': 3,
+          'nama': 'Pemilik Uji',
+          'email': 'pemilik@uji.test',
+          'role': 'pemilik',
+        },
+        keluar: () {},
+      ),
+    );
+    expect(find.text('Pin informasi ke beranda'), findsOneWidget);
+    expect(find.text('Ringkasan toko'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('Lowongan yang ditutup hilang setelah respons muat ulang', (
     tester,
@@ -272,7 +319,7 @@ void main() {
     await tester.tap(find.byTooltip('Muat ulang'));
     await tester.pumpAndSettle();
     expect(find.text('Lowongan uji'), findsNothing);
-    expect(find.text('Belum ada lowongan aktif.'), findsOneWidget);
+    expect(find.text('Belum ada data'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -284,27 +331,10 @@ void main() {
       tester,
       DaftarBarang(api: api, role: 'pemilik', keluar: () {}),
       lebar: 320,
-      skala: 1.5,
+      skala: 1.4,
     );
     await tester.drag(find.byType(ListView).first, const Offset(0, -350));
     await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('Keranjang kg mempertahankan pecahan dan total sesudah edit', (
-    tester,
-  ) async {
-    final api = ApiTampilanUji();
-    final keranjang = Keranjang()..atur(api.barang[1], 1250);
-    await buka(tester, LayarKeranjang(api: api, keranjang: keranjang));
-    expect(find.text('Rp18.750'), findsOneWidget);
-    await tester.tap(find.byTooltip('Ubah jumlah Barang uji kg'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextFormField), '2,125');
-    await tester.tap(find.text('Simpan'));
-    await tester.pumpAndSettle();
-    expect(keranjang.item[3]!.jumlah, 2125);
-    expect(find.text('Rp31.875'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

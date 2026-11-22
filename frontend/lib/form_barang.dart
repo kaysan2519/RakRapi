@@ -6,6 +6,18 @@ import 'api.dart';
 import 'katalog.dart' show FotoPrivat, PesanGagal;
 import 'theme/app_theme.dart';
 
+const daftarSatuan = [
+  'botol',
+  'kg',
+  'pcs',
+  'bungkus',
+  'pack',
+  'sisir',
+  'kotak',
+  'lembar',
+  'sachet',
+];
+
 Future<Json?> dialogKategori(
   BuildContext context,
   RakRapiApi api, {
@@ -114,23 +126,26 @@ class _FormBarangState extends State<FormBarang> {
   final nama = TextEditingController();
   final harga = TextEditingController();
   final stok = TextEditingController();
+  final deskripsi = TextEditingController();
   List<Json> kategori = [];
   int? kategoriId;
-  String satuan = 'botol';
+  String satuan = 'pack';
   Uint8List? fotoBaru;
   String? pesan, masalahKategori;
   bool mengirim = false, memuatKategori = true, memilih = false;
   final _form = GlobalKey<FormState>();
+
   @override
   void initState() {
     super.initState();
     final b = widget.barang;
     if (b != null) {
-      nama.text = b['nama'];
+      nama.text = b['nama'] ?? '';
       harga.text = b['harga_rupiah'].toString();
       stok.text = stokTampil(b).split(' ').first;
-      satuan = b['satuan'];
+      satuan = daftarSatuan.contains(b['satuan']) ? b['satuan'] : 'pack';
       kategoriId = b['kategori_id'];
+      deskripsi.text = (b['deskripsi'] ?? '').toString();
     }
     muatKategori();
   }
@@ -140,6 +155,7 @@ class _FormBarangState extends State<FormBarang> {
     nama.dispose();
     harga.dispose();
     stok.dispose();
+    deskripsi.dispose();
     super.dispose();
   }
 
@@ -185,6 +201,9 @@ class _FormBarangState extends State<FormBarang> {
         throw const KesalahanApi('Foto maksimal 5 MiB.');
       }
       final bytes = await file.readAsBytes();
+      if (deteksiJenisGambar(bytes) == null) {
+        throw const KesalahanApi('Pilih foto JPG, PNG, atau WebP.');
+      }
       if (mounted) setState(() => fotoBaru = bytes);
     } catch (e) {
       if (mounted) setState(() => pesan = e.toString());
@@ -198,8 +217,8 @@ class _FormBarangState extends State<FormBarang> {
     if (!RegExp(r'^\d{1,9}(\.\d{1,3})?$').hasMatch(jumlah)) {
       return 'Isi stok 0 atau lebih, maksimal tiga desimal.';
     }
-    if (satuan == 'botol' && double.parse(jumlah) % 1 != 0) {
-      return 'Jumlah botol harus bulat.';
+    if (satuan != 'kg' && double.parse(jumlah) % 1 != 0) {
+      return 'Jumlah untuk satuan $satuan harus bilangan bulat.';
     }
     return null;
   }
@@ -230,6 +249,9 @@ class _FormBarangState extends State<FormBarang> {
             stok.text.trim() != stokTampil(lama).split(' ').first)
           'stok': stok.text.trim(),
         if (lama == null || satuan != lama['satuan']) 'satuan': satuan,
+        if (lama == null ||
+            deskripsi.text.trim() != (lama['deskripsi'] ?? '').toString())
+          'deskripsi': deskripsi.text.trim(),
       };
       if (isian.isEmpty && fotoBaru == null) {
         Navigator.pop(context, lama!['id']);
@@ -258,7 +280,7 @@ class _FormBarangState extends State<FormBarang> {
       canPop: !mengirim,
       child: Scaffold(
         appBar: AppBar(
-          title: Text(b == null ? 'Tambah barang' : 'Ubah barang'),
+          title: Text(b == null ? 'Tambah produk' : 'Edit produk'),
         ),
         body: SafeArea(
           child: Form(
@@ -267,26 +289,33 @@ class _FormBarangState extends State<FormBarang> {
               padding: const EdgeInsets.all(16),
               children: [
                 Container(
-                  padding: const EdgeInsets.all(18),
-                  margin: const EdgeInsets.only(bottom: 24),
+                  padding: const EdgeInsets.all(16),
+                  margin: const EdgeInsets.only(bottom: 18),
                   decoration: BoxDecoration(
                     color: hijauLembut,
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
                     children: [
                       const Icon(Icons.inventory_2_outlined, color: hijauUtama),
-                      const SizedBox(height: 10),
-                      Text(
-                        b == null
-                            ? 'Lengkapi informasi barang'
-                            : 'Perbarui informasi barang',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'Harga berlaku per satuan. Pastikan stok dan foto sesuai dengan barang di toko.',
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              b == null
+                                  ? 'Lengkapi informasi produk'
+                                  : 'Perbarui informasi produk',
+                              style: const TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 2),
+                            const Text(
+                              'Harga berlaku per satuan. Foto lama tetap aman saat hanya mengubah teks.',
+                              style: TextStyle(fontSize: 12, color: teksRedup),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -294,16 +323,16 @@ class _FormBarangState extends State<FormBarang> {
                 TextFormField(
                   controller: nama,
                   enabled: !mengirim,
-                  decoration: const InputDecoration(labelText: 'Nama barang'),
+                  decoration: const InputDecoration(labelText: 'Nama produk'),
                   validator: (value) {
                     final namaBarang = (value ?? '').trim();
                     if (namaBarang.isEmpty || namaBarang.runes.length > 150) {
-                      return 'Isi nama, maksimal 150 karakter.';
+                      return 'Isi nama produk, maksimal 150 karakter.';
                     }
                     return null;
                   },
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 DropdownButtonFormField<int>(
                   key: ValueKey(kategoriId),
                   initialValue: kategoriId,
@@ -320,7 +349,7 @@ class _FormBarangState extends State<FormBarang> {
                   onChanged: mengirim || memuatKategori
                       ? null
                       : (v) => setState(() => kategoriId = v),
-                  validator: (v) => v == null ? 'Pilih kategori barang.' : null,
+                  validator: (v) => v == null ? 'Pilih kategori produk.' : null,
                 ),
                 if (memuatKategori) const LinearProgressIndicator(),
                 if (masalahKategori != null)
@@ -332,18 +361,18 @@ class _FormBarangState extends State<FormBarang> {
                       onPressed: mengirim || memuatKategori
                           ? null
                           : tambahKategori,
-                      icon: const Icon(Icons.add),
+                      icon: const Icon(Icons.add, size: 18),
                       label: const Text('Tambah kategori'),
                     ),
                   )
                 else
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                 TextFormField(
                   controller: harga,
                   enabled: !mengirim,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
-                    labelText: 'Harga per satuan',
+                    labelText: 'Harga per satuan (Rp)',
                     prefixText: 'Rp ',
                   ),
                   validator: (v) {
@@ -351,13 +380,14 @@ class _FormBarangState extends State<FormBarang> {
                     final rupiah = int.tryParse(angka);
                     if (!RegExp(r'^\d+$').hasMatch(angka) ||
                         rupiah == null ||
+                        rupiah < 1 ||
                         rupiah > 4294967295) {
-                      return 'Isi harga dalam rupiah bulat.';
+                      return 'Isi harga bulat lebih dari Rp0.';
                     }
                     return null;
                   },
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -377,7 +407,7 @@ class _FormBarangState extends State<FormBarang> {
                       child: DropdownButtonFormField<String>(
                         initialValue: satuan,
                         decoration: const InputDecoration(labelText: 'Satuan'),
-                        items: ['botol', 'kg']
+                        items: daftarSatuan
                             .map(
                               (s) => DropdownMenuItem(value: s, child: Text(s)),
                             )
@@ -389,7 +419,18 @@ class _FormBarangState extends State<FormBarang> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: deskripsi,
+                  enabled: !mengirim,
+                  maxLines: 3,
+                  maxLength: 500,
+                  decoration: const InputDecoration(
+                    labelText: 'Deskripsi produk (opsional)',
+                    alignLabelWithHint: true,
+                  ),
+                ),
+                const SizedBox(height: 10),
                 OutlinedButton.icon(
                   onPressed: memilih || mengirim ? null : pilihFoto,
                   icon: const Icon(Icons.photo_outlined),
@@ -398,31 +439,32 @@ class _FormBarangState extends State<FormBarang> {
                   ),
                 ),
                 const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 10),
+                  padding: EdgeInsets.symmetric(vertical: 8),
                   child: Text(
-                    'JPEG atau PNG • maksimal 5 MiB dan 16 megapiksel',
+                    'JPG, PNG, atau WebP · maksimal 5 MB',
+                    style: TextStyle(fontSize: 12, color: teksRedup),
                   ),
                 ),
                 if (fotoBaru != null)
-                  Image.memory(
-                    fotoBaru!,
-                    height: 160,
-                    cacheHeight: 480,
-                    fit: BoxFit.contain,
-                    semanticLabel: 'Pratinjau foto',
-                    errorBuilder: (_, _, _) => const Text(
-                      'Foto tidak dapat dibaca. Pilih JPEG atau PNG.',
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: Image.memory(
+                      fotoBaru!,
+                      height: 170,
+                      cacheHeight: 480,
+                      fit: BoxFit.contain,
+                      semanticLabel: 'Pratinjau foto',
                     ),
                   )
                 else if (b != null)
                   FotoPrivat(api: widget.api, id: b['id']),
                 if (pesan != null) PesanGagal(pesan!),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 FilledButton(
                   onPressed: mengirim || memilih || memuatKategori
                       ? null
                       : simpan,
-                  child: Text(mengirim ? 'Menyimpan…' : 'Simpan'),
+                  child: Text(mengirim ? 'Menyimpan…' : 'Simpan produk'),
                 ),
               ],
             ),

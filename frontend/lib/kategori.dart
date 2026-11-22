@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'api.dart';
 import 'form_barang.dart' show dialogKategori;
 import 'katalog.dart' show PesanGagal;
+import 'theme/app_theme.dart';
+import 'widgets/keadaan_kosong.dart';
 
 class DaftarKategori extends StatefulWidget {
   const DaftarKategori({super.key, required this.api});
@@ -44,16 +46,26 @@ class _DaftarKategoriState extends State<DaftarKategori> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Kelola kategori')),
+    appBar: AppBar(
+      title: const Text('Kelola kategori'),
+      actions: [
+        IconButton(
+          tooltip: 'Muat ulang',
+          onPressed: muatUlang,
+          icon: const Icon(Icons.refresh),
+        ),
+      ],
+    ),
     body: SafeArea(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.all(16),
-            child: FilledButton(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            child: FilledButton.icon(
               onPressed: tambah,
-              child: const Text('Tambah kategori'),
+              icon: const Icon(Icons.add),
+              label: const Text('Tambah kategori'),
             ),
           ),
           Expanded(
@@ -73,22 +85,150 @@ class _DaftarKategoriState extends State<DaftarKategori> {
                 }
                 final daftar = hasil.requireData;
                 if (daftar.isEmpty) {
-                  return const Center(child: Text('Belum ada kategori.'));
+                  return const Center(
+                    child: KeadaanKosong(
+                      ikon: Icons.category_outlined,
+                      judul: 'Belum ada kategori',
+                      penjelasan: 'Tambahkan kategori untuk mengelompokkan produk toko.',
+                    ),
+                  );
                 }
                 return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
                   itemCount: daftar.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (_, i) => ListTile(
-                    title: Text(daftar[i]['nama']),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => bukaDetail(daftar[i]['id']),
-                  ),
+                  separatorBuilder: (_, _) => const SizedBox(height: 10),
+                  itemBuilder: (_, i) {
+                    final k = daftar[i];
+                    final jumlah = k['jumlah_produk'] ?? 0;
+                    return Card(
+                      child: ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: hijauLembut,
+                          child: Icon(Icons.grid_view_rounded, color: hijauUtama, size: 20),
+                        ),
+                        title: Text(
+                          k['nama'],
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        subtitle: Text(
+                          '$jumlah produk',
+                          style: const TextStyle(color: teksRedup),
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => bukaDetail(k['id']),
+                      ),
+                    );
+                  },
                 );
               },
             ),
           ),
         ],
       ),
+    ),
+  );
+}
+
+class LayarKategoriPembeli extends StatefulWidget {
+  const LayarKategoriPembeli({
+    super.key,
+    required this.api,
+    required this.onPilihKategori,
+  });
+  final RakRapiApi api;
+  final void Function(int kategoriId) onPilihKategori;
+
+  @override
+  State<LayarKategoriPembeli> createState() => _LayarKategoriPembeliState();
+}
+
+class _LayarKategoriPembeliState extends State<LayarKategoriPembeli> {
+  late Future<List<Json>> _future = widget.api.kategori();
+
+  void muat() {
+    setState(() {
+      _future = widget.api.kategori();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Kategori')),
+    body: FutureBuilder<List<Json>>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snap.hasError) {
+          return Center(child: PesanGagal(snap.error.toString(), ulangi: muat));
+        }
+        final daftar = snap.requireData;
+        if (daftar.isEmpty) {
+          return const Center(
+            child: KeadaanKosong(
+              ikon: Icons.grid_view_outlined,
+              judul: 'Belum ada kategori',
+              penjelasan: 'Kategori produk akan tampil setelah ditambahkan toko.',
+            ),
+          );
+        }
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            const Text(
+              'Pilih kebutuhan yang ingin Anda cari.',
+              style: TextStyle(color: teksRedup),
+            ),
+            const SizedBox(height: 16),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: daftar.length,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                childAspectRatio: 1.45,
+              ),
+              itemBuilder: (_, i) {
+                final k = daftar[i];
+                return Card(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(18),
+                    onTap: () {
+                      Navigator.pop(context);
+                      widget.onPilihKategori(k['id'] as int);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.grid_view_rounded, color: hijauUtama, size: 22),
+                          const SizedBox(height: 8),
+                          Text(
+                            k['nama'],
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${k['jumlah_produk'] ?? 0} produk',
+                            style: const TextStyle(fontSize: 12, color: teksRedup),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        );
+      },
     ),
   );
 }
@@ -125,6 +265,9 @@ class _DetailKategoriState extends State<DetailKategori> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Hapus “$nama”?'),
+        content: const Text(
+          'Kategori hanya dapat dihapus jika tidak lagi digunakan oleh produk.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -188,22 +331,37 @@ class _DetailKategoriState extends State<DetailKategori> {
           return ListView(
             padding: const EdgeInsets.all(20),
             children: [
-              Text(
-                kategori['nama'],
-                style: Theme.of(context).textTheme.headlineMedium,
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Nama kategori', style: TextStyle(color: teksRedup)),
+                      const SizedBox(height: 4),
+                      Text(
+                        kategori['nama'],
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 18),
               FilledButton(
                 onPressed: menghapus ? null : () => ubah(kategori),
-                child: const Text('Ubah'),
+                child: const Text('Ubah nama kategori'),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               OutlinedButton(
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.red.shade800,
+                  foregroundColor: merahPeringatan,
+                  side: const BorderSide(color: merahPeringatan),
                 ),
                 onPressed: menghapus ? null : () => hapus(kategori['nama']),
-                child: Text(menghapus ? 'Menghapus…' : 'Hapus'),
+                child: Text(menghapus ? 'Menghapus…' : 'Hapus kategori'),
               ),
               if (pesan != null) PesanGagal(pesan!),
             ],
