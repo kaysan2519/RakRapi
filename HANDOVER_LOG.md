@@ -12,64 +12,44 @@
 - **Workspace lokal:** `C:\Users\Kaysan\UjiLevel`
 - **Repositori remote:** `https://github.com/kaysan2519/RakRapi.git`
 
-## 2. Branch & Commit Aktual
+## 2. Branch, Checkpoint, & Commit Aktual
 
 - **Branch aktif:** `codex/ui-env-pixel8` *(tidak di-merge ke `main`, tidak force push)*
-- **Milestone terverifikasi:**
+- **Checkpoint sebelum simplifikasi:** tag `checkpoint/sebelum-simplifikasi-33b641a` pada commit `33b641a`
+- **Riwayat milestone terverifikasi:**
   - `7650557` — `test: perketat validasi exp JWT, pesan sesi 401, dan uji autentikasi`
   - `52668ee` — `feat: siapkan konfigurasi HOST, CORS allowlist, dan versi Node untuk cloud`
   - `b4ca02b` — `feat: integrasikan Cloudinary privat dan validasi foto lintas OS (Opsi V2)`
   - `12b598b` — `docs: rapikan struktur satu env backend dan catat verifikasi live Aiven`
-  - Milestone terbaru (Fase 4): Migrasi penuh database `rakrapi` ke Aiven (6 tabel + 4 FK + stored procedure + 4 akun minimal `REQUIRE SSL`), migrasi foto asli ID 2 ke Cloudinary privat (SHA-256 identik), pengujian JWT+Aiven+Cloudinary, dan bukti empiris validasi JPEG Pilihan 2.
+  - `0e61c02` — `docs: catat hasil migrasi Aiven, foto Cloudinary privat, dan evaluasi validasi JPEG`
+  - `33b641a` — `feat(backend): validasi foto PNG/JPEG ketat menggunakan Sharp`
+  - **Simplifikasi terbaru (22 November 2026):** Penyatuan menjadi **1 file `.env` sederhana (struktur MyNotes)**, **1 pool Drizzle ORM (`db`)**, **1 akun runtime aplikasi (`rakrapi_app`)** pada Laragon dan Aiven (`REQUIRE SSL`, bukan `avnadmin`), penyederhanaan `foto.service.ts` (Cloudinary privat tanpa `GET_LOCK`/mock, turun dari 325 → 176 baris), penyederhanaan `koneksi.ts` (`DB_SSL` + `DB_SSL_CA_BASE64`), `akun.service.ts` (`JWT_EXPIRES_IN=1h`, `BCRYPT_SALT_ROUNDS=12`), `cors.middleware.ts`, pembersihan total Render (API key terverifikasi `HTTP 401` dan dihapus), serta sinkronisasi SRS, diagram, blackbox testing, dan panduan presentasi ujian.
 
-## 3. Struktur Environment Aktif (Tetap 1 File Utama)
+## 3. Struktur Environment Aktif (1 File Utama — Struktur MyNotes)
 
-- `backend/.env` *(diabaikan Git)* — satu-satunya file konfigurasi aktif lokal (Laragon, `JWT_SECRET` tetap sama, `CLOUDINARY_*` terisi, `FOTO_STORAGE=lokal` agar dev lokal tetap memakai foto lokal).
-- `backend/.env.example` *(tracked Git)* — template tanpa credential.
-- `backend/private/aiven/` *(diabaikan Git, non-runtime)* — `ca.pem`, `admin.env` (admin migrasi), dan `kredensial-aplikasi.json` (4 akun aplikasi `REQUIRE SSL` untuk dimasukkan ke Dashboard Render, BUKAN `avnadmin`).
-- `backend/private/arsip-env-20261122/` *(diabaikan Git)* — arsip file lama `.env.aiven`, `.env.demo`, `.env.sebelum-rapikan`.
-- Tidak ada `.env.aiven`, `.env.demo`, atau `.env.production` di root `backend/`.
+- `backend/.env` *(diabaikan Git)* — satu-satunya file konfigurasi aktif (16 variabel: `NODE_ENV`, `PORT`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SSL`, `DB_SSL_CA_BASE64`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `BCRYPT_SALT_ROUNDS`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CORS_ORIGIN`).
+- `backend/.env.example` *(tracked Git)* — template tanpa nilai rahasia.
+- `backend/private/aiven/` *(diabaikan Git, non-runtime)* — `ca.pem`, `admin.env`, `kredensial-aplikasi.json`, `kredensial-app-tunggal.json` (`rakrapi_app@%` + `DB_SSL_CA_BASE64`).
+- `backend/private/arsip-env-20261122/` *(diabaikan Git)* — cadangan `.env` lama sebelum dirapikan dan sebelum simplifikasi.
+- Tidak ada file Render API key maupun script Render tersisa.
 
-## 4. Hasil Migrasi Database Aiven & Foto Cloudinary (22 November 2026 — TERVERIFIKASI LIVE)
-
-### A. Database Aiven (`mysql-1067ea2a-mapiltugass.l.aivencloud.com:17374`, MySQL `8.4.11`, `TLSv1.3`)
-- **Database baru:** `rakrapi` (`utf8mb4` / `utf8mb4_0900_ai_ci`), diverifikasi `periksa-aiven.cjs` → `nama_database_drizzle: "rakrapi"`, `tls_terverifikasi: true`.
-- **6 tabel terverifikasi:** `users`, `kategori`, `barang`, `lowongan`, `pesanan`, `detail_pesanan`.
-- **4 Foreign Key terverifikasi:** `fk_barang_kategori`, `detail_pesanan_ibfk_1`, `detail_pesanan_ibfk_2`, `pesanan_ibfk_1`.
-- **Stored procedure:** `tambah_pegawai` (`SECURITY_TYPE: DEFINER`, `DEFINER: avnadmin@%`) — diuji eksekusi `CALL tambah_pegawai` pada database uji terisolasi Aiven (kemudian dibersihkan), **LULUS**.
-- **4 akun aplikasi minimal (`REQUIRE SSL`, bukan `avnadmin`):** `rakrapi_health@%`, `rakrapi_auth@%`, `rakrapi_pegawai@%`, `rakrapi_katalog@%` — `SHOW GRANTS` identik dengan Laragon.
-- **Kesamaan data lokal vs Aiven (100% identik):**
-  - `users`: 4 lokal = 4 Aiven (seluruh `password_hash` diverifikasi SHA-256 identik)
-  - `kategori`: 1 lokal = 1 Aiven (`id=2`, `Minyak Goreng`)
-  - `barang`: 1 lokal = 1 Aiven (`id=2`, `Minyak goreng 1 L`, `Rp19.000`, `12.000 botol`, `foto_key=431a9e84-3c42-438a-b876-a2f8816c61dd.png`)
-  - `lowongan`: 0 = 0, `pesanan`: 0 = 0, `detail_pesanan`: 0 = 0
-- **Keutuhan database proyek lain di Aiven (100% utuh):**
-  - `defaultdb`: `notes=7`, `schema_migrations=2`, `users=3` (identik sebelum & sesudah)
-  - `money_tracker`: `categories=14`, `transactions=2` (identik sebelum & sesudah)
-- **Keutuhan lokal Laragon & backup:** Database Laragon `rakrapi` tetap aktif (`GET /api/health` → 200), backup SQL (`backup-laragon-20261121.sql`) & backup foto (`backup-foto-20261121`) utuh.
-
-### B. Foto Asli ID 2 di Cloudinary Privat (`authenticated`)
-- `foto_key`: `431a9e84-3c42-438a-b876-a2f8816c61dd.png` → `public_id`: `rakrapi/db-rakrapi/431a9e84-3c42-438a-b876-a2f8816c61dd`
-- Ukuran & integritas: `2.200.991` byte lokal = `2.200.991` byte Cloudinary; **SHA-256 identik** (`D731582FC79F60F0740122930E1FAABF116DE7CF487DB4E2336780BD7E968BF7`).
-- Keamanan privat: URL publik (`/image/upload/...`) → **HTTP 404**; URL `/image/authenticated/...` tanpa signature → **HTTP 401**. Foto lokal tetap utuh.
-
-## 5. Hasil Pengujian Pasca-Migrasi (Backend Asli + Aiven + Cloudinary + JWT)
+## 4. Hasil Pengujian Pasca-Simplifikasi (22 November 2026 — TERVERIFIKASI LIVE)
 
 | Pengujian | Hasil Aktual | Status |
 |---|---|---|
-| Health API via Aiven TLS (`rakrapi_health`) | `GET /api/health` → HTTP 200 `{"status":"ok","nama_database":"rakrapi"}` | **LULUS** |
-| Login `pemilik` & `pegawai` (`bcrypt.compare` + JWT HS256 1 jam) | HTTP 200, `exp - iat = 3600`, login sandi salah HTTP 401 | **LULUS** |
-| Pemeriksaan role `warga` dari Aiven | `GET /api/auth/me` → HTTP 200 `role: warga` | **LULUS** |
-| Token hilang/rusak/kedaluwarsa/tanpa `exp`/`none`/secret salah | **49/49 pemeriksaan HTTP 401** pada seluruh endpoint privat | **LULUS** |
-| Hak akses 3 role (`pemilik`, `pegawai`, `warga`) | Pemilik `200`, pegawai/warga `403` sesuai matriks | **LULUS** |
-| Katalog, Detail ID 2 (`INNER JOIN`), & Foto ID 2 via Cloudinary | Ketiga role HTTP 200; byte foto **SHA-256 identik** dengan foto asli | **LULUS** |
-| Stored Procedure `tambah_pegawai` di Aiven (DB uji terisolasi) | `CALL tambah_pegawai` oleh akun `REQUIRE SSL` menghasilkan role `pegawai`; DB uji dibersihkan | **LULUS** |
-| **Evaluasi Validasi JPEG Pilihan 2 (Cloudinary server-side decode)** | Uji live 3 metode Cloudinary (`eager_sync_png`, `colors+phash`, `quality_analysis`) pada `jpg_scan_korup` & `jpg_scan_kosong` → **ketiganya masih diterima Cloudinary (`DITERIMA_CLOUDINARY`, `eager_status: OK`)** karena decoder JPEG toleran mengisi area korup; `9/9` aset uji dibersihkan. | **GAGAL MENOLAK SCAN-KORUP — MENUNGGU KEPUTUSAN** |
+| Backend TypeScript build (`npm run build`) | Exit code 0, 0 error | **LULUS** |
+| Flutter analyze (`flutter analyze --no-pub`) | `No issues found!` | **LULUS** |
+| Flutter tests (`flutter test --no-pub`) | **18/18 tes lulus** (`sesi_test`, `keranjang_test`, `form_barang_test`, `tampilan_test`) | **LULUS** |
+| Unit koneksi, TLS base64, & CORS (`test/koneksi.cjs`) | 4/4 tes lulus | **LULUS** |
+| Unit validasi Sharp & foto (`test/foto.cjs`) | 4/4 tes lulus (PNG/JPEG/corrupt/MIME/>5MiB/>16MP + foto ID 2) | **LULUS** |
+| Akun, 3 role, lowongan, & JWT (`test/akun.cjs --uji-jwt`) | **90/90 pemeriksaan HTTP JWT lulus** (`HS256`, 3600 detik, role live dari MySQL) | **LULUS** |
+| Keranjang, pesanan, konfirmasi, & transaksi stok (`test/akun.cjs --uji-pesanan`) | Konfirmasi serentak, stok 14→12 & 12.5→10, stok kurang 409 rollback utuh, harga lama terjaga | **LULUS** |
+| Katalog, CRUD kategori/barang, `INNER JOIN`, FK 409, upload foto (`test/katalog.cjs`) | 5/5 subtest lulus | **LULUS** |
+| Live Laragon (`rakrapi_app@localhost`, 1 pool `db` + Cloudinary privat) | Health 200, login 3 role 200/401/403, detail ID 2, foto ID 2 SHA-256 identik, CORS 204 | **LULUS** |
+| Live Aiven (`rakrapi_app@%`, `DB_SSL=true`, `DB_SSL_CA_BASE64`, `TLSv1.3` + Cloudinary privat) | Health 200, `periksa-aiven.cjs` TLS terverifikasi, login 3 role, detail ID 2, foto ID 2 SHA-256 identik | **LULUS** |
+| Integritas Data Asli, Backup, Stored Procedure, & Proyek Aiven Lain | `users=4`, `kategori=1`, `barang=1` (ID 2 Rp19.000, 12 botol), `defaultdb` & `money_tracker` utuh, `tambah_pegawai` utuh, 4 akun lama + `rakrapi_app` utuh, SHA-256 foto identik | **LULUS** |
 
-## 6. Kendala & Keputusan Selanjutnya Sebelum Deployment Render (Tahap 5)
+## 5. Bagian yang Belum Selesai / Belum Terverifikasi (Jujur & Transparan)
 
-1. **Keputusan atas hasil Pilihan 2 (JPEG header valid + isi scan korup):**
-   - Karena 3 metode decode Cloudinary tanpa dependency baru (`eager_sync_png`, `colors+phash`, `quality_analysis`) terbukti secara empiris **tidak menolak** JPEG scan-korup (sama seperti `System.Drawing` Windows), menunggu keputusan pengembang sebelum deployment Render:
-     - **Opsi A:** Menerima batas kasus ekstrem JPEG scan-korup pada Opsi V2 (tanpa tambah dependency di luar materi guru; PNG IDAT rusak tetap tertolak `415`, JPEG sampah/MIME palsu/>5 MiB/>16 MP tetap tertolak `413`/`415`, plus boleh tambah 3 baris penolakan `jpg_scan_kosong` di `dimensiJpeg`) → langsung lanjut deploy Render Free (Tahap 5).
-     - **Opsi B:** Menyetujui pemasangan `sharp` (`failOn: 'error'`) khusus untuk menolak JPEG scan-korup secara ketat di Linux & Windows sebelum deploy Render.
-2. **Konfirmasi status kredit trial Aiven** hingga melewati **25 November 2026** dan persetujuan mulai **Tahap 5 (Deploy Backend Render Free)**.
+1. **Verifikasi isi Google Docs *Intro Express JS*:** Dokumen terkunci login Google dan belum tersedia di folder `docs/`, sehingga kesesuaian detail contoh kode guru untuk (a) pengganti `sharp` pada validasi upload gambar (`foto.validation.ts` dipertahankan sementara agar keamanan validasi tidak melemah) dan (b) pola persis Cloudinary/Drizzle di dokumen guru belum dapat diverifikasi baris per baris.
+2. **Deployment Website MAPIL (Vercel/Netlify) & Jalur Backend Publik (All Devices):** Deployment Render dihentikan total sesuai keputusan pengembang. Bentuk website MAPIL dan jalur hosting backend publik sesuai materi guru menunggu konfirmasi guru dan keputusan pengembang (tanpa memilih layanan alternatif sepihak).

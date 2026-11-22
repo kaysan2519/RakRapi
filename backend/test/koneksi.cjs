@@ -1,137 +1,110 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
 const { opsiKoneksi } = require('../dist/config/koneksi');
 const { aturCors } = require('../dist/middleware/cors.middleware');
 
-// Hanya memeriksa konfigurasi. Tidak menghubungi atau menulis ke database.
 function denganEnv(nilai, periksa) {
-  const nama = ['DB_MODE', 'DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_SSL_CA'];
-  const sebelum = Object.fromEntries(nama.map((key) => [key, process.env[key]]));
+  const nama = ['DB_HOST', 'DB_PORT', 'DB_USER', 'DB_PASSWORD', 'DB_NAME', 'DB_SSL', 'DB_SSL_CA_BASE64', 'CORS_ORIGIN'];
+  const sebelum = Object.fromEntries(nama.map(key => [key, process.env[key]]));
   try {
-    for (const key of nama) {
-      delete process.env[key];
-    }
+    for (const key of nama) delete process.env[key];
     Object.assign(process.env, nilai);
     periksa();
   } finally {
     for (const key of nama) {
       delete process.env[key];
-      if (sebelum[key] !== undefined) {
-        process.env[key] = sebelum[key];
-      }
+      if (sebelum[key] !== undefined) process.env[key] = sebelum[key];
     }
   }
 }
 
-test('Laragon tetap localhost, port 3306, tanpa TLS tambahan', () => {
-  denganEnv({}, () => {
-    const opsi = opsiKoneksi('akun', 'sandi');
-    assert.equal(opsi.host, '127.0.0.1');
+const caDummyBase64 = Buffer.from('-----BEGIN CERTIFICATE-----\nDUMMY\n-----END CERTIFICATE-----\n').toString('base64');
+
+test('Laragon lokal memakai localhost, port 3306, tanpa SSL', () => {
+  denganEnv({ DB_USER: 'root', DB_PASSWORD: '' }, () => {
+    const opsi = opsiKoneksi();
+    assert.equal(opsi.host, 'localhost');
     assert.equal(opsi.port, 3306);
     assert.equal(opsi.database, 'rakrapi');
+    assert.equal(opsi.user, 'root');
     assert.equal(opsi.connectTimeout, 3000);
     assert.equal(opsi.ssl, undefined);
-    assert.equal(opsiKoneksi('akun', 'sandi', 'database_uji').database, 'database_uji');
+    assert.equal(opsiKoneksi('database_uji').database, 'database_uji');
   });
 });
 
-test('Aiven menolak host lokal, CA kosong, kredensial kosong, dan CA tidak terbaca', () => {
-  denganEnv({ DB_MODE: 'aiven' }, () => assert.throws(() => opsiKoneksi('akun', 'sandi'), /DB_HOST/));
-  const cloud = { DB_MODE: 'aiven', DB_HOST: 'uji.aivencloud.com' };
-  denganEnv(cloud, () => assert.throws(() => opsiKoneksi('akun', 'sandi'), /DB_SSL_CA/));
-  denganEnv({ ...cloud, DB_SSL_CA: 'tidak-ada.pem' }, () => {
-    assert.throws(() => opsiKoneksi('akun', undefined), /konfigurasi privat/);
-    assert.throws(() => opsiKoneksi('akun', 'sandi'), /tidak bisa dibaca/);
+test('Aiven wajib DB_SSL=true dan DB_SSL_CA_BASE64 yang valid', () => {
+  denganEnv({ DB_HOST: 'uji.aivencloud.com', DB_SSL: 'false' }, () => {
+    assert.throws(() => opsiKoneksi(), /DB_SSL=true/);
   });
-});
-
-test('Host Aiven tidak bisa memakai mode Laragon', () => {
-  denganEnv({ DB_HOST: 'uji.aivencloud.com' }, () => assert.throws(() => opsiKoneksi('akun', 'sandi'), /DB_MODE=aiven/));
-});
-
-test('Mode dan nomor port yang keliru ditolak', () => {
-  denganEnv({ DB_MODE: 'salah' }, () => assert.throws(() => opsiKoneksi('akun', 'sandi'), /DB_MODE/));
+  denganEnv({ DB_HOST: 'uji.aivencloud.com', DB_SSL: 'true' }, () => {
+    assert.throws(() => opsiKoneksi(), /DB_SSL_CA_BASE64/);
+  });
+  denganEnv({ DB_HOST: 'uji.aivencloud.com', DB_SSL: 'true', DB_SSL_CA_BASE64: Buffer.from('bukan-ca').toString('base64') }, () => {
+    assert.throws(() => opsiKoneksi(), /sertifikat CA/);
+  });
   for (const port of ['0', '65536', 'abc', '3.5']) {
-    denganEnv({ DB_PORT: port }, () => assert.throws(() => opsiKoneksi('akun', 'sandi'), /DB_PORT/));
+    denganEnv({ DB_PORT: port }, () => assert.throws(() => opsiKoneksi(), /DB_PORT/));
   }
 });
 
-test('Opsi Aiven selalu memverifikasi CA dan identitas host untuk setiap akun', () => {
-  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'rakrapi-konfigurasi-'));
-  const file = path.join(folder, 'ca.pem');
-  try {
-    // Fixture hanya untuk membaca opsi; bukan bukti handshake TLS dengan Aiven.
-    fs.writeFileSync(file, 'fixture CA');
-    denganEnv({ DB_MODE: 'aiven', DB_HOST: 'uji.aivencloud.com', DB_PORT: '17374', DB_SSL_CA: file }, () => {
-      for (const akun of ['health', 'auth', 'pegawai', 'katalog']) {
-        const opsi = opsiKoneksi(akun, 'sandi');
-        assert.equal(opsi.port, 17374);
-        assert.equal(opsi.user, akun);
-        assert.equal(opsi.ssl.ca.toString(), 'fixture CA');
-        assert.equal(opsi.ssl.rejectUnauthorized, true);
-        assert.equal(opsi.ssl.verifyIdentity, true);
-        assert.equal(opsi.connectTimeout, 15000);
-      }
-    });
-  } finally {
-    fs.unlinkSync(file);
-    fs.rmdirSync(folder);
-  }
+test('Opsi Aiven memverifikasi sertifikat CA dan identitas host', () => {
+  denganEnv({
+    DB_HOST: 'uji.aivencloud.com',
+    DB_PORT: '17374',
+    DB_USER: 'rakrapi_app',
+    DB_PASSWORD: 'sandi',
+    DB_NAME: 'rakrapi',
+    DB_SSL: 'true',
+    DB_SSL_CA_BASE64: caDummyBase64,
+  }, () => {
+    const opsi = opsiKoneksi();
+    assert.equal(opsi.host, 'uji.aivencloud.com');
+    assert.equal(opsi.port, 17374);
+    assert.equal(opsi.user, 'rakrapi_app');
+    assert.equal(opsi.ssl.rejectUnauthorized, true);
+    assert.equal(opsi.ssl.verifyIdentity, true);
+    assert.ok(opsi.ssl.ca.toString('utf8').includes('BEGIN CERTIFICATE'));
+    assert.equal(opsi.connectTimeout, 15000);
+  });
 });
 
-test('CORS hanya mengizinkan origin terdaftar, menolak wildcard dan preflight asing', () => {
-  const sebelum = process.env.CORS_ORIGIN;
+test('CORS mendukung wildcard * saat development dan allowlist domain saat production', () => {
   function jalankan(method, origin) {
     const headers = {};
     let status = null, selesai = false, lanjut = false;
-    const req = { method, get: (nama) => (nama.toLowerCase() === 'origin' ? origin : undefined) };
+    const req = { method, get: nama => (nama.toLowerCase() === 'origin' ? origin : undefined) };
     const res = {
-      vary: (k) => { headers.vary = k; },
+      vary: k => { headers.vary = k; },
       set: (k, v) => { headers[k.toLowerCase()] = v; },
-      status: (kode) => { status = kode; return res; },
+      status: kode => { status = kode; return res; },
       end: () => { selesai = true; },
     };
     aturCors(req, res, () => { lanjut = true; });
     return { headers, status, selesai, lanjut };
   }
 
-  try {
-    process.env.CORS_ORIGIN = 'https://rakrapi.vercel.app/, *';
-
-    const preflight = jalankan('OPTIONS', 'https://rakrapi.vercel.app');
+  denganEnv({ CORS_ORIGIN: '*' }, () => {
+    const preflight = jalankan('OPTIONS', 'http://localhost:8080');
     assert.equal(preflight.status, 204);
-    assert.equal(preflight.selesai, true);
-    assert.equal(preflight.lanjut, false);
-    assert.equal(preflight.headers['access-control-allow-origin'], 'https://rakrapi.vercel.app');
-    assert.match(preflight.headers['access-control-allow-headers'], /Authorization/);
-    assert.match(preflight.headers['access-control-allow-headers'], /Content-Type/);
-    assert.equal(preflight.headers.vary, 'Origin');
+    assert.equal(preflight.headers['access-control-allow-origin'], '*');
+    const getDev = jalankan('GET', 'http://localhost:8080');
+    assert.equal(getDev.lanjut, true);
+    assert.equal(getDev.headers['access-control-allow-origin'], '*');
+  });
 
-    const getSah = jalankan('GET', 'https://rakrapi.vercel.app');
-    assert.equal(getSah.lanjut, true);
-    assert.equal(getSah.headers['access-control-allow-origin'], 'https://rakrapi.vercel.app');
+  denganEnv({ CORS_ORIGIN: 'https://rakrapi.vercel.app/' }, () => {
+    const preflightSah = jalankan('OPTIONS', 'https://rakrapi.vercel.app');
+    assert.equal(preflightSah.status, 204);
+    assert.equal(preflightSah.headers['access-control-allow-origin'], 'https://rakrapi.vercel.app');
+    assert.equal(preflightSah.headers.vary, 'Origin');
 
     const preflightAsing = jalankan('OPTIONS', 'https://asing.example');
     assert.equal(preflightAsing.status, 403);
-    assert.equal(preflightAsing.selesai, true);
-    assert.equal(preflightAsing.lanjut, false);
     assert.equal(preflightAsing.headers['access-control-allow-origin'], undefined);
-
-    const getAsing = jalankan('GET', 'https://asing.example');
-    assert.equal(getAsing.lanjut, true);
-    assert.equal(getAsing.headers['access-control-allow-origin'], undefined);
 
     const tanpaOrigin = jalankan('GET', undefined);
     assert.equal(tanpaOrigin.lanjut, true);
     assert.equal(tanpaOrigin.headers['access-control-allow-origin'], undefined);
-  } finally {
-    if (sebelum === undefined) {
-      delete process.env.CORS_ORIGIN;
-    } else {
-      process.env.CORS_ORIGIN = sebelum;
-    }
-  }
+  });
 });

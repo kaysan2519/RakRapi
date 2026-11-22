@@ -11,16 +11,14 @@ const { setTimeout: tunggu } = require('node:timers/promises');
 const readline = require('node:readline');
 const bcrypt = require('bcryptjs');
 
-if (process.env.DB_MODE === 'aiven') {
+if (process.env.DB_SSL === 'true') {
   throw Error('Tes ini khusus Laragon. Gunakan konfigurasi lokal; jangan menjalankannya pada Aiven.');
 }
 
 const cli = process.env.MYSQL_CLI || 'C:/laragon/bin/mysql/mysql-8.0.30-winx64/bin/mysql.exe';
 const tag = randomBytes(8).toString('hex');
 const db = 'rakrapi_uji_akun_' + tag;
-const publik = 'pub_' + tag;
-const staf = 'staf_' + tag;
-const katalog = 'kat_' + tag;
+const akunApp = 'app_' + tag;
 const emailPemilik = 'pemilik.' + tag + '@rakrapi.test';
 const sandi = () => randomBytes(18).toString('hex');
 
@@ -121,27 +119,19 @@ async function main() {
     admin(fs.readFileSync('database/06_pesanan.sql', 'utf8'), db);
     assert.ok(snapshot() === sebelum, 'ID, role dan hash lama harus identik');
 
-    const sandiPublik = akunMysql(publik);
-    const sandiStaf = akunMysql(staf);
-    const sandiKatalog = akunMysql(katalog);
-    admin("GRANT SELECT (id,nama,email,password_hash,role), INSERT (nama,email,password_hash) ON " + db + ".users TO '" + publik + "'@'localhost';");
+    const sandiApp = akunMysql(akunApp);
     const demoPesanan = process.argv[2] === '--demo-pesanan';
     const demoManual = demoPesanan || process.argv[2] === '--demo';
-    const izinKatalog = 'SELECT, INSERT, UPDATE, DELETE';
-    for (const tabel of ['kategori','barang']) admin("GRANT " + izinKatalog + " ON " + db + "." + tabel + " TO '" + katalog + "'@'localhost';");
-    admin("GRANT SELECT, INSERT (judul), UPDATE (aktif) ON " + db + ".lowongan TO '" + katalog + "'@'localhost';");
-    admin("GRANT SELECT, INSERT, UPDATE (status) ON " + db + ".pesanan TO '" + katalog + "'@'localhost';");
-    admin("GRANT SELECT, INSERT ON " + db + ".detail_pesanan TO '" + katalog + "'@'localhost';");
-    admin("GRANT EXECUTE ON PROCEDURE " + db + ".tambah_pegawai TO '" + staf + "'@'localhost';");
+    admin("GRANT SELECT, INSERT, UPDATE, DELETE ON " + db + ".* TO '" + akunApp + "'@'localhost';");
     const listener = net.createServer().listen(0, '127.0.0.1');
     await once(listener, 'listening');
     const port = listener.address().port;
     await new Promise(resolve => listener.close(resolve));
     const kunciJwtUji = sandi();
-    server = spawn(process.execPath, ['--env-file=.env', 'dist/index.js'], { windowsHide: true, stdio: 'ignore',
-      env: { ...process.env, PORT: String(port), AUTH_DB_NAME: db, AUTH_DB_USER: publik, AUTH_DB_PASSWORD: sandiPublik,
-        PEGAWAI_DB_USER: staf, PEGAWAI_DB_PASSWORD: sandiStaf, CATALOG_DB_NAME: db, CATALOG_DB_USER: katalog,
-        CATALOG_DB_PASSWORD: sandiKatalog, UPLOAD_DIR: folder, JWT_SECRET: kunciJwtUji } });
+    server = spawn(process.execPath, ['dist/index.js'], { windowsHide: true, stdio: 'ignore',
+      env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', DB_HOST: '127.0.0.1', DB_PORT: '3306',
+        DB_NAME: db, DB_USER: akunApp, DB_PASSWORD: sandiApp, DB_SSL: 'false', DB_SSL_CA_BASE64: '',
+        UPLOAD_DIR: folder, JWT_SECRET: kunciJwtUji, JWT_EXPIRES_IN: '1h', BCRYPT_SALT_ROUNDS: '10' } });
     const api = 'http://127.0.0.1:' + port + '/api';
     for (let i=0; i<100; i++) {
       try { if ((await fetch(api + '/health')).ok) break; } catch {}

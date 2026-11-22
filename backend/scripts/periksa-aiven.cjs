@@ -1,19 +1,15 @@
 // Baca saja: tidak membuat database, mengubah tabel, atau mengisi katalog.
-// Jalankan dari backend setelah build. Semua konfigurasi dibaca dari .env.
+// Jalankan dari backend setelah build: npm run cek:aiven
 const mysql = require('mysql2/promise');
 const { drizzle } = require('drizzle-orm/mysql2');
 const { sql } = require('drizzle-orm');
 const { opsiKoneksi } = require('../dist/config/koneksi');
 
 async function periksa() {
-  if (process.env.DB_MODE !== 'aiven') {
-    throw Error('Gunakan konfigurasi DB_MODE=aiven.');
+  if (process.env.DB_SSL !== 'true') {
+    throw Error('Gunakan konfigurasi Aiven dengan DB_SSL=true dan DB_SSL_CA_BASE64.');
   }
-  const admin = process.argv.includes('--admin');
-  const user = admin ? process.env.ADMIN_DB_USER : process.env.DB_USER;
-  const password = admin ? process.env.ADMIN_DB_PASSWORD : process.env.DB_PASSWORD;
-  const opsi = opsiKoneksi(user, password);
-  // Tetap bisa memeriksa layanan yang belum memiliki database rakrapi.
+  const opsi = opsiKoneksi();
   delete opsi.database;
   const koneksi = await mysql.createConnection(opsi);
   try {
@@ -21,7 +17,7 @@ async function periksa() {
     if (!saluran.encrypted || !saluran.authorized) {
       throw Error('Koneksi TLS belum terverifikasi.');
     }
-    const [[server]] = await koneksi.query('SELECT @@hostname AS server_mysql, @@port AS port_mysql');
+    const [[server]] = await koneksi.query('SELECT @@hostname AS server_mysql, @@port AS port_mysql, CURRENT_USER() AS akun_aktif');
     const [tabel] = await koneksi.query(`
       SELECT TABLE_SCHEMA AS nama_database, TABLE_NAME AS nama_tabel
       FROM information_schema.TABLES
@@ -45,21 +41,14 @@ async function periksa() {
       ...server,
       nama_database_drizzle: namaDatabase,
       tabel,
-      tabel_terlihat_kosong: tabel.length === 0,
     }, null, 2));
-    if (tabel.length) {
-      console.log('Database sudah berisi tabel. Periksa dan laporkan isinya sebelum migration.');
-    } else {
-      console.log('Tidak ada tabel yang terlihat oleh akun ini. Pastikan pemeriksaan memakai akun administrator sebelum migration.');
-    }
   } finally {
     await koneksi.end();
   }
 }
 
 periksa().catch((error) => {
-  // Pesan driver bisa mengandung akun/host; jangan cetak objek error atau URI koneksi.
   const kode = /^[A-Z0-9_]+$/.test(error.code ?? '') ? error.code : 'KONFIGURASI_ATAU_KONEKSI';
-  console.error('Pemeriksaan Aiven gagal: ' + kode + '. Periksa env privat, CA, dan jaringan.');
+  console.error('Pemeriksaan Aiven gagal: ' + kode + '. Periksa .env, CA base64, dan jaringan.');
   process.exitCode = 1;
 });

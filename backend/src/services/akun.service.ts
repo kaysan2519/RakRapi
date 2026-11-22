@@ -1,11 +1,23 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { eq, sql } from "drizzle-orm";
-import type { ProcedureCallPacket, RowDataPacket } from "mysql2/promise";
-import { authDb, pegawaiPool } from "../config/db";
+import { eq } from "drizzle-orm";
+import { db } from "../config/db";
 import { users } from "../config/schema";
 
 const profil = { id: users.id, nama: users.nama, email: users.email, role: users.role };
+
+function saltRounds(): number {
+  const nilai = Number(process.env.BCRYPT_SALT_ROUNDS ?? 12);
+  if (!Number.isInteger(nilai) || nilai < 10 || nilai > 14) {
+    return 12;
+  }
+  return nilai;
+}
+
+function masaBerlakuToken(): jwt.SignOptions["expiresIn"] {
+  const nilai = process.env.JWT_EXPIRES_IN?.trim();
+  return (nilai || "1h") as jwt.SignOptions["expiresIn"];
+}
 
 export async function daftarkanAkun(
   nama: string,
@@ -13,12 +25,10 @@ export async function daftarkanAkun(
   password: string,
   role: "warga" | "pegawai",
 ) {
-  const hash = await bcrypt.hash(password, 10);
+  const hash = await bcrypt.hash(password, saltRounds());
   try {
-    const id = role === "warga"
-      ? await tambahWarga(nama, email, hash)
-      : await tambahPegawai(nama, email, hash);
-    return { id, nama, email, role };
+    const [hasil] = await db.insert(users).values({ nama, email, passwordHash: hash, role });
+    return { id: hasil.insertId, nama, email, role };
   } catch (error) {
     if (emailDuplikat(error)) {
       return null;
@@ -41,35 +51,8 @@ export async function periksaLogin(email: string, password: unknown) {
   return { token: buatToken(id), user: { id, nama, email: user.email, role } };
 }
 
-async function tambahWarga(nama: string, email: string, hash: string) {
-  return authDb.transaction(async tx => {
-    const [result] = await tx.execute(sql`
-      INSERT INTO users (nama, email, password_hash) VALUES (${nama}, ${email}, ${hash})
-    `);
-    const [akun] = await tx
-      .select({ role: users.role })
-      .from(users)
-      .where(eq(users.id, result.insertId));
-    // Batalkan pendaftaran jika database masih memakai default lama.
-    if (akun?.role !== "warga") {
-      throw new Error("Default role warga belum tersedia.");
-    }
-    return result.insertId;
-  });
-}
-
-async function tambahPegawai(nama: string, email: string, hash: string) {
-  if (!process.env.PEGAWAI_DB_USER || !process.env.PEGAWAI_DB_PASSWORD) {
-    throw new Error("Koneksi pembuatan pegawai belum siap.");
-  }
-  const [hasil] = await pegawaiPool.execute<ProcedureCallPacket<(RowDataPacket & { id: number })[]>>(
-    "CALL tambah_pegawai(?, ?, ?)", [nama, email, hash],
-  );
-  return hasil[0][0].id;
-}
-
 async function cariUntukLogin(email: string) {
-  const [user] = await authDb
+  const [user] = await db
     .select({ ...profil, passwordHash: users.passwordHash })
     .from(users)
     .where(eq(users.email, email))
@@ -78,7 +61,7 @@ async function cariUntukLogin(email: string) {
 }
 
 export async function ambilProfil(id: number) {
-  const [user] = await authDb.select(profil).from(users).where(eq(users.id, id)).limit(1);
+  const [user] = await db.select(profil).from(users).where(eq(users.id, id)).limit(1);
   return user;
 }
 
@@ -89,29 +72,29 @@ function emailDuplikat(error: unknown): boolean {
   if ("code" in error && error.code === "ER_DUP_ENTRY") {
     return true;
   }
-
   return error instanceof Error && emailDuplikat(error.cause);
 }
 
-function jwtSecret() {
+function jwtSecret(): string {
   const key = process.env.JWT_SECRET;
   if (!key || Buffer.byteLength(key) < 32) {
-    throw new Error("Kunci JWT belum siap");
+    throw new Error("Kunci JWT belum siap.");
   }
-
   return key;
 }
 
 function buatToken(id: number) {
   return jwt.sign({}, jwtSecret(), {
-    algorithm: "HS256", subject: String(id), issuer: "rakrapi", expiresIn: "1h",
+    algorithm: "HS256",
+    subject: String(id),
+    issuer: "rakrapi",
+    expiresIn: masaBerlakuToken(),
   });
 }
 
 export function idPenggunaDariToken(authorization: string | undefined): number | undefined {
-  // Kata Bearer, satu spasi, lalu token tanpa spasi.
-  const polaBearer = /^Bearer ([^\s]+)$/i;
-  const bearer = polaBearer.exec(authorization ?? "");
+  // Format wajib: "Bearer <token>"
+  const bearer = /^Bearer ([^\s]+)$/i.exec(authorization ?? "");
   if (!bearer) {
     return undefined;
   }
@@ -122,21 +105,14 @@ export function idPenggunaDariToken(authorization: string | undefined): number |
     if (typeof claims === "string" || typeof claims.sub !== "string") {
       return undefined;
     }
-
-    // verify memeriksa waktu exp jika ada; aplikasi mewajibkan batas waktunya.
     if (typeof claims.exp !== "number" || !Number.isFinite(claims.exp)) {
       return undefined;
     }
-
-    // Klaim sub berisi ID pengguna: 1–10 digit, tanpa nol di depan.
-    const polaIdPengguna = /^[1-9]\d{0,9}$/;
-    if (!polaIdPengguna.test(claims.sub)) {
+    if (!/^[1-9]\d{0,9}$/.test(claims.sub)) {
       return undefined;
     }
-
     return Number(claims.sub);
   } catch {
-    // Token tidak sah atau kedaluwarsa.
     return undefined;
   }
 }

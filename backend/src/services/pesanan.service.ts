@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, sql } from "drizzle-orm";
-import { catalogDb } from "../config/db";
+import { db } from "../config/db";
 import { barang, detailPesanan, pesanan } from "../config/schema";
 import { KesalahanKatalog } from "../middleware/error.middleware";
 import type { validasiPesanan } from "../validations/pesanan.validation";
@@ -19,11 +19,11 @@ function subtotal(harga: number, jumlah: string) {
 export async function buatPesanan(warga: { id: number; nama: string }, input: ReturnType<typeof validasiPesanan>) {
   const filter = and(eq(pesanan.warga_id, warga.id), eq(pesanan.kunci_kirim, input.kunci));
   // Kunci unik juga menangani dua kiriman yang datang bersamaan.
-  const cariKiriman = async () => (await catalogDb.select(ringkasan).from(pesanan).where(filter))[0];
+  const cariKiriman = async () => (await db.select(ringkasan).from(pesanan).where(filter))[0];
   const sudahAda = await cariKiriman();
   if (sudahAda) return sudahAda;
   try {
-    return await catalogDb.transaction(async tx => {
+    return await db.transaction(async tx => {
       let total = 0n;
       const rincian = [];
       // Urutan ID yang sama mencegah dua pesanan mengunci barang dalam urutan terbalik.
@@ -55,19 +55,19 @@ export async function buatPesanan(warga: { id: number; nama: string }, input: Re
 
 export function daftarPesanan(wargaId?: number) {
   const filter = wargaId === undefined ? undefined : eq(pesanan.warga_id, wargaId);
-  return catalogDb.select(ringkasan).from(pesanan).where(filter).orderBy(desc(pesanan.id));
+  return db.select(ringkasan).from(pesanan).where(filter).orderBy(desc(pesanan.id));
 }
 
 export async function ambilPesanan(id: number, wargaId?: number) {
   const filter = and(eq(pesanan.id, id), wargaId === undefined ? undefined : eq(pesanan.warga_id, wargaId));
-  const [data] = await catalogDb.select(ringkasan).from(pesanan).where(filter);
+  const [data] = await db.select(ringkasan).from(pesanan).where(filter);
   if (!data) throw new KesalahanKatalog(404, "Pesanan tidak ditemukan.");
-  const rincian = await catalogDb.select().from(detailPesanan).where(eq(detailPesanan.pesanan_id,id)).orderBy(asc(detailPesanan.id));
+  const rincian = await db.select().from(detailPesanan).where(eq(detailPesanan.pesanan_id,id)).orderBy(asc(detailPesanan.id));
   return { ...data, item: rincian.map(r => ({ ...r, subtotal_rupiah: subtotal(r.harga_rupiah, r.jumlah).toString() })) };
 }
 
 export async function konfirmasiPesanan(id: number) {
-  await catalogDb.transaction(async tx => {
+  await db.transaction(async tx => {
     const [data] = await tx.select().from(pesanan).where(eq(pesanan.id, id)).for("update");
     if (!data) {
       throw new KesalahanKatalog(404, "Pesanan tidak ditemukan.");

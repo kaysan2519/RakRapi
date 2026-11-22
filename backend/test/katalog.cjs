@@ -1,7 +1,7 @@
 // Jalankan dari backend: node --env-file=.env --test test/katalog.cjs
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { randomUUID } = require("node:crypto");
+const { randomBytes, randomUUID } = require("node:crypto");
 const { spawn, execFileSync } = require("node:child_process");
 const fs = require("node:fs/promises");
 const os = require("node:os");
@@ -9,8 +9,9 @@ const path = require("node:path");
 const net = require("node:net");
 const { once } = require("node:events");
 const { setTimeout: wait } = require("node:timers/promises");
+const bcrypt = require("bcryptjs");
 
-if (process.env.DB_MODE === 'aiven') {
+if (process.env.DB_SSL === 'true') {
   throw Error('Tes ini khusus Laragon. Gunakan konfigurasi lokal; jangan menjalankannya pada Aiven.');
 }
 
@@ -31,17 +32,18 @@ test("katalog lokal melalui HTTP", async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "rakrapi-foto-"));
   const folder = path.join(root, "db-" + schema);
   let dibuatDB = false, dibuatAkun = false, password, app, url;
+  const sandiUji = randomBytes(16).toString("hex");
+  const kunciJwtUji = randomBytes(24).toString("hex");
   let pemilik, pegawai;
   async function start() {
     const listener = net.createServer().listen(0, "127.0.0.1");
     await once(listener, "listening");
     const port = listener.address().port;
     await new Promise(resolve => listener.close(resolve));
-    const env = { ...process.env, PORT: String(port), CATALOG_DB_NAME: schema,
-      CATALOG_DB_USER: account, CATALOG_DB_PASSWORD: password, UPLOAD_DIR: root };
-    delete env.DEMO_PEGAWAI_PASSWORD;
-    delete env.DEMO_PEMILIK_PASSWORD;
-    app = spawn(process.execPath, ["--env-file=.env", "dist/index.js"], {
+    const env = { ...process.env, PORT: String(port), HOST: "127.0.0.1", DB_HOST: "127.0.0.1", DB_PORT: "3306",
+      DB_NAME: schema, DB_USER: account, DB_PASSWORD: password, DB_SSL: "false", DB_SSL_CA_BASE64: "",
+      UPLOAD_DIR: root, JWT_SECRET: kunciJwtUji, JWT_EXPIRES_IN: "1h", BCRYPT_SALT_ROUNDS: "10" };
+    app = spawn(process.execPath, ["dist/index.js"], {
       env, windowsHide: true, stdio: "ignore",
     });
     url = "http://127.0.0.1:" + port + "/api";
@@ -76,27 +78,26 @@ test("katalog lokal melalui HTTP", async (t) => {
     admin("CREATE DATABASE " + schema + " CHARACTER SET utf8mb4;");
     dibuatDB = true;
     const ddl = await fs.readFile("database/01_skema.sql", "utf8");
-    const tabel = ddl.indexOf("CREATE TABLE kategori (");
+    const tabel = ddl.indexOf("CREATE TABLE users (");
     assert.notEqual(tabel, -1);
     admin("USE " + schema + ";\n" + ddl.slice(tabel));
+    const hashUji = await bcrypt.hash(sandiUji, 10);
+    admin("USE " + schema + "; INSERT INTO users (nama,email,password_hash,role) VALUES ('Pemilik Uji','pemilik.uji@rakrapi.test','" + hashUji + "','pemilik'), ('Pegawai Uji','pegawai.uji@rakrapi.test','" + hashUji + "','pegawai');");
     const credentials = admin("CREATE USER '" + account + "'@'localhost' IDENTIFIED BY RANDOM PASSWORD;");
     dibuatAkun = true;
     password = credentials.split("\t")[2];
     assert.ok(password);
-    for (const table of ["kategori", "barang"]) {
-      admin("GRANT SELECT, INSERT, UPDATE, DELETE ON " + schema + "." + table + " TO '" + account + "'@'localhost';");
-    }
-    // Sandi demo sudah dimuat dari .env bersama konfigurasi backend.
+    admin("GRANT SELECT, INSERT, UPDATE, DELETE ON " + schema + ".* TO '" + account + "'@'localhost';");
     await start();
     await t.test("health utama dan login dua role", async () => {
-      assert.deepEqual(await http("GET", "/health", 200), { status: "ok", nama_database: "rakrapi" });
+      assert.deepEqual(await http("GET", "/health", 200), { status: "ok", nama_database: schema });
       async function login(role, pass) {
         const result = await http("POST", "/auth/login", 200, null, { email: role + ".uji@rakrapi.test", password: pass });
         assert.equal(result.user.role, role);
         return result.token;
       }
-      pemilik = await login("pemilik", process.env.DEMO_PEMILIK_PASSWORD);
-      pegawai = await login("pegawai", process.env.DEMO_PEGAWAI_PASSWORD);
+      pemilik = await login("pemilik", sandiUji);
+      pegawai = await login("pegawai", sandiUji);
     });
     await t.test("pemilik CRUD kategori, validasi, dan pembatasan pegawai", async () => {
       assert.deepEqual((await http("GET", "/kategori", 200, pemilik)).data, []);
@@ -191,7 +192,7 @@ test("katalog lokal melalui HTTP", async (t) => {
       await fs.writeFile(path.join(folder, randomUUID() + ".png"), png);
       await start();
       const fresh = await http("POST", "/auth/login", 200, null,
-        { email: "pegawai.uji@rakrapi.test", password: process.env.DEMO_PEGAWAI_PASSWORD });
+        { email: "pegawai.uji@rakrapi.test", password: sandiUji });
       assert.deepEqual(await http("GET", foto, 200, fresh.token), png);
       assert.deepEqual((await http("GET", item, 200, fresh.token)).data, setelah);
       assert.deepEqual(await fileList(), filesBefore);
