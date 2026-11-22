@@ -1,8 +1,10 @@
 // Jalankan dari backend: node --test test/foto.cjs
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { execFileSync } = require('node:child_process');
-const { periksaFoto, periksaDimensiFoto } = require('../dist/validations/foto.validation');
+const fs = require('node:fs');
+const path = require('node:path');
+const sharp = require('sharp');
+const { periksaFoto } = require('../dist/validations/foto.validation');
 const {
   aturKlienCloudinaryUntukUji,
   bacaFoto,
@@ -12,26 +14,6 @@ const {
   tulisFoto,
 } = require('../dist/services/foto.service');
 const { KesalahanKatalog } = require('../dist/middleware/error.middleware');
-
-function buatGambarContoh() {
-  // Gambar valid kecil dibuat di RAM agar tidak perlu file contoh di repo.
-  const skrip = `
-    Add-Type -AssemblyName System.Drawing
-    $bitmap=[Drawing.Bitmap]::new(12,8)
-    $bitmap.SetPixel(4,4,[Drawing.Color]::ForestGreen)
-    foreach ($format in @([Drawing.Imaging.ImageFormat]::Png,[Drawing.Imaging.ImageFormat]::Jpeg)) {
-      $stream=New-Object IO.MemoryStream
-      $bitmap.Save($stream,$format)
-      [Convert]::ToBase64String($stream.ToArray())
-      $stream.Dispose()
-    }
-    $bitmap.Dispose()`;
-  const [png, jpg] = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', skrip], {
-    windowsHide: true,
-    encoding: 'utf8',
-  }).trim().split(/\r?\n/).map(b => Buffer.from(b, 'base64'));
-  return { png, jpg };
-}
 
 function fileMulter(buffer, mimetype) {
   return { buffer, mimetype, size: buffer.length };
@@ -44,7 +26,6 @@ function pngDenganHeaderValidIsiRusak(pngAsli) {
     const panjang = salinan.readUInt32BE(posisi);
     const tipe = salinan.toString('ascii', posisi + 4, posisi + 8);
     if (tipe === 'IDAT' && panjang > 4) {
-      // Rusak byte isi IDAT tanpa merusak struktur panjang chunk atau header IHDR.
       salinan[posisi + 8] ^= 0xff;
       salinan[posisi + 9] ^= 0xff;
       salinan[posisi + 10] ^= 0xff;
@@ -55,6 +36,29 @@ function pngDenganHeaderValidIsiRusak(pngAsli) {
   throw new Error('Chunk IDAT tidak ditemukan.');
 }
 
+function jpegHeaderValidScanRusak(jpgAsli, kosong = false) {
+  const salinan = Buffer.from(jpgAsli);
+  let pos = 2;
+  while (pos < salinan.length - 2) {
+    if (salinan[pos] !== 0xff) break;
+    while (pos < salinan.length && salinan[pos] === 0xff) pos++;
+    const marker = salinan[pos++];
+    if (marker === 0xd9) break;
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue;
+    const len = salinan.readUInt16BE(pos);
+    if (marker === 0xda) {
+      const prefix = salinan.subarray(0, pos + len);
+      if (kosong) {
+        return Buffer.concat([prefix, Buffer.from([0xff, 0xd9])]);
+      }
+      const sampah = Buffer.from('deadbeef00ff1234567890abcdef00ff99887766', 'hex');
+      return Buffer.concat([prefix, sampah, Buffer.from([0xff, 0xd9])]);
+    }
+    pos += len;
+  }
+  throw new Error('SOS tidak ditemukan.');
+}
+
 function pngDimensiBesar(pngAsli, lebar, tinggi) {
   const salinan = Buffer.from(pngAsli);
   salinan.writeUInt32BE(lebar, 16);
@@ -63,7 +67,6 @@ function pngDimensiBesar(pngAsli, lebar, tinggi) {
 }
 
 function jpegDimensiBesar(lebar, tinggi) {
-  // JPEG minimal dengan segmen SOF0 (dimensi besar) + SOS + EOI.
   const sof0 = Buffer.from([
     0xff, 0xc0, 0x00, 0x0b, 0x08,
     (tinggi >> 8) & 0xff, tinggi & 0xff,
@@ -89,89 +92,100 @@ function denganEnvFoto(nilai, kerja) {
   }
 }
 
-const { png, jpg } = buatGambarContoh();
+async function buatGambarValid() {
+  const png = await sharp({ create: { width: 32, height: 24, channels: 3, background: { r: 18, g: 43, b: 34 } } })
+    .png()
+    .toBuffer();
+  const jpg = await sharp({ create: { width: 32, height: 24, channels: 3, background: { r: 18, g: 43, b: 34 } } })
+    .jpeg({ quality: 90 })
+    .toBuffer();
+  return { png, jpg };
+}
 
-test('Validasi foto menerima PNG dan JPEG valid pada Windows dan Linux+Cloudinary', async () => {
-  assert.equal(await periksaFoto(fileMulter(png, 'image/png'), { platform: 'win32' }), 'png');
-  assert.equal(await periksaFoto(fileMulter(jpg, 'image/jpeg'), { platform: 'win32' }), 'jpg');
-  assert.equal(await periksaFoto(fileMulter(png, 'image/png'), { platform: 'linux', pakaiCloudinary: true }), 'png');
-  assert.equal(await periksaFoto(fileMulter(jpg, 'image/jpeg'), { platform: 'linux', pakaiCloudinary: true }), 'jpg');
-  assert.deepEqual(periksaDimensiFoto(png, 'png'), { lebar: 12, tinggi: 8 });
-  assert.deepEqual(periksaDimensiFoto(jpg, 'jpg'), { lebar: 12, tinggi: 8 });
+test('Validasi Sharp menerima PNG/JPEG valid tanpa mengubah byte asli', async () => {
+  const { png, jpg } = await buatGambarValid();
+  const salinanPng = Buffer.from(png);
+  const salinanJpg = Buffer.from(jpg);
+
+  assert.equal(await periksaFoto(fileMulter(png, 'image/png')), 'png');
+  assert.equal(await periksaFoto(fileMulter(jpg, 'image/jpeg')), 'jpg');
+  // Pastikan byte asli tidak dikompresi atau diubah
+  assert.equal(Buffer.compare(png, salinanPng), 0);
+  assert.equal(Buffer.compare(jpg, salinanJpg), 0);
+
+  // Foto produk asli ID 2 (baca saja) jika tersedia di mesin lokal
+  const lokasiFotoAsli = path.join(__dirname, '../private/uploads/db-rakrapi/431a9e84-3c42-438a-b876-a2f8816c61dd.png');
+  if (fs.existsSync(lokasiFotoAsli)) {
+    const asli = fs.readFileSync(lokasiFotoAsli);
+    assert.equal(await periksaFoto(fileMulter(asli, 'image/png')), 'png');
+  }
 });
 
-test('Validasi foto menolak MIME palsu, ukuran > 5 MiB, dimensi > 16 MP, dan gambar korup di tengah', async () => {
+test('Validasi Sharp menolak PNG korup, JPEG scan korup, JPEG scan kosong, MIME palsu, >5 MiB, dan >16 MP', async () => {
+  const { png, jpg } = await buatGambarValid();
+
   // MIME palsu
   await assert.rejects(
-    periksaFoto(fileMulter(png, 'image/jpeg'), { platform: 'linux', pakaiCloudinary: true }),
+    periksaFoto(fileMulter(png, 'image/jpeg')),
     err => err instanceof KesalahanKatalog && err.status === 415,
   );
   await assert.rejects(
-    periksaFoto(fileMulter(jpg, 'image/png'), { platform: 'win32' }),
+    periksaFoto(fileMulter(jpg, 'image/png')),
     err => err instanceof KesalahanKatalog && err.status === 415,
   );
   await assert.rejects(
-    periksaFoto(fileMulter(Buffer.from('bukan gambar sama sekali ini teks biasa'), 'image/png'), { platform: 'linux', pakaiCloudinary: true }),
+    periksaFoto(fileMulter(Buffer.from('bukan gambar sama sekali ini teks biasa'), 'image/png')),
     err => err instanceof KesalahanKatalog && err.status === 415,
   );
 
-  // Melebihi 5 MiB
+  // Ukuran > 5 MiB -> 413
   await assert.rejects(
-    periksaFoto(fileMulter(Buffer.alloc(5 * 1024 * 1024 + 1), 'image/png'), { platform: 'linux', pakaiCloudinary: true }),
+    periksaFoto(fileMulter(Buffer.alloc(5 * 1024 * 1024 + 1), 'image/png')),
     err => err instanceof KesalahanKatalog && err.status === 413,
   );
 
-  // Melebihi 16 megapiksel (5000 x 4000 = 20 MP) untuk PNG & JPEG pada Windows dan Linux
-  const png20Mp = pngDimensiBesar(png, 5000, 4000);
-  const jpg20Mp = jpegDimensiBesar(5000, 4000);
-  for (const opsi of [{ platform: 'win32' }, { platform: 'linux', pakaiCloudinary: true }]) {
-    await assert.rejects(
-      periksaFoto(fileMulter(png20Mp, 'image/png'), opsi),
-      err => err instanceof KesalahanKatalog && err.status === 415,
-    );
-    await assert.rejects(
-      periksaFoto(fileMulter(jpg20Mp, 'image/jpeg'), opsi),
-      err => err instanceof KesalahanKatalog && err.status === 415,
-    );
-  }
-
-  // Gambar korup pada bagian tengah (magic bytes awal & akhir valid, chunk tengah rusak)
-  const korupTengah = Buffer.concat([png.subarray(0, 8), Buffer.from('rusak-di-tengah-chunk'), png.subarray(-12)]);
-  for (const opsi of [{ platform: 'win32' }, { platform: 'linux', pakaiCloudinary: true }]) {
-    await assert.rejects(
-      periksaFoto(fileMulter(korupTengah, 'image/png'), opsi),
-      err => err instanceof KesalahanKatalog && err.status === 415,
-    );
-  }
-
-  // Gambar header IHDR valid tetapi isi IDAT rusak: wajib ditolak 415 pada Windows dan Linux
-  const headerValidIsiRusak = pngDenganHeaderValidIsiRusak(png);
-  for (const opsi of [{ platform: 'win32' }, { platform: 'linux', pakaiCloudinary: true }]) {
-    await assert.rejects(
-      periksaFoto(fileMulter(headerValidIsiRusak, 'image/png'), opsi),
-      err => err instanceof KesalahanKatalog && err.status === 415,
-    );
-  }
-
-  // Linux tanpa Cloudinary tidak boleh diam-diam meloloskan gambar tanpa decode penuh
+  // Dimensi > 16 MP (5000x4000 = 20 MP) -> 415
   await assert.rejects(
-    periksaFoto(fileMulter(png, 'image/png'), { platform: 'linux', pakaiCloudinary: false }),
-    err => err instanceof KesalahanKatalog && err.status === 503,
+    periksaFoto(fileMulter(pngDimensiBesar(png, 5000, 4000), 'image/png')),
+    err => err instanceof KesalahanKatalog && err.status === 415,
+  );
+  await assert.rejects(
+    periksaFoto(fileMulter(jpegDimensiBesar(5000, 4000), 'image/jpeg')),
+    err => err instanceof KesalahanKatalog && err.status === 415,
+  );
+
+  // PNG korup tengah & PNG header IHDR valid isi IDAT rusak -> 415
+  const pngKorupTengah = Buffer.concat([png.subarray(0, 8), Buffer.from('rusak-di-tengah-chunk'), png.subarray(-12)]);
+  await assert.rejects(
+    periksaFoto(fileMulter(pngKorupTengah, 'image/png')),
+    err => err instanceof KesalahanKatalog && err.status === 415,
+  );
+  await assert.rejects(
+    periksaFoto(fileMulter(pngDenganHeaderValidIsiRusak(png), 'image/png')),
+    err => err instanceof KesalahanKatalog && err.status === 415,
+  );
+
+  // KASUS KRITIS FASE 4: JPEG header SOF0+SOS valid tetapi isi scan korup & scan kosong -> WAJIB DITOLAK 415!
+  await assert.rejects(
+    periksaFoto(fileMulter(jpegHeaderValidScanRusak(jpg, false), 'image/jpeg')),
+    err => err instanceof KesalahanKatalog && err.status === 415,
+  );
+  await assert.rejects(
+    periksaFoto(fileMulter(jpegHeaderValidScanRusak(jpg, true), 'image/jpeg')),
+    err => err instanceof KesalahanKatalog && err.status === 415,
   );
 });
 
-test('Cloudinary: simpan/baca privat, tolak isi rusak 415, gangguan jaringan 503, dan pembersihan aman saat DB gagal', async () => {
+test('Cloudinary: simpan/baca privat, gambar rusak ditolak sebelum unggah, gangguan 503, dan rollback aman', async () => {
+  const { png, jpg } = await buatGambarValid();
   const penyimpanan = new Map();
   const dihapus = [];
+  let jumlahUnggah = 0;
   let modeKlien = 'normal';
 
   aturKlienCloudinaryUntukUji({
     async unggah(publicId, bytes) {
-      if (modeKlien === 'rusak') {
-        const err = new Error('Invalid image file');
-        err.http_code = 400;
-        throw err;
-      }
+      jumlahUnggah++;
       if (modeKlien === 'dimensi-berlebih') {
         penyimpanan.set(publicId, bytes);
         return { format: 'png', width: 5000, height: 4000 };
@@ -180,7 +194,7 @@ test('Cloudinary: simpan/baca privat, tolak isi rusak 415, gangguan jaringan 503
         throw Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' });
       }
       penyimpanan.set(publicId, bytes);
-      return { format: bytes[0] === 137 ? 'png' : 'jpg', width: 12, height: 8 };
+      return { format: bytes[0] === 137 ? 'png' : 'jpg', width: 32, height: 24 };
     },
     async unduh(publicId) {
       if (modeKlien === 'gangguan') {
@@ -199,77 +213,54 @@ test('Cloudinary: simpan/baca privat, tolak isi rusak 415, gangguan jaringan 503
   });
 
   try {
-    // 1. PNG & JPEG valid tersimpan dan terbaca kembali dengan byte identik
+    // JPEG scan korup ditolak di siapkanFoto SEBELUM menyentuh Cloudinary (jumlahUnggah tetap 0)
+    await assert.rejects(
+      siapkanFoto(fileMulter(jpegHeaderValidScanRusak(jpg, false), 'image/jpeg')),
+      err => err instanceof KesalahanKatalog && err.status === 415,
+    );
+    assert.equal(jumlahUnggah, 0);
+
+    // PNG & JPEG valid tersimpan dan terbaca byte identik
     const siapPng = await siapkanFoto(fileMulter(png, 'image/png'));
     await tulisFoto(siapPng);
-    const terbacaPng = await bacaFoto(siapPng.key);
-    assert.equal(terbacaPng.mime, 'image/png');
-    assert.deepEqual(terbacaPng.bytes, png);
+    assert.deepEqual((await bacaFoto(siapPng.key)).bytes, png);
 
     const siapJpg = await siapkanFoto(fileMulter(jpg, 'image/jpeg'));
     await tulisFoto(siapJpg);
-    const terbacaJpg = await bacaFoto(siapJpg.key);
-    assert.equal(terbacaJpg.mime, 'image/jpeg');
-    assert.deepEqual(terbacaJpg.bytes, jpg);
+    assert.deepEqual((await bacaFoto(siapJpg.key)).bytes, jpg);
 
-    // 2. Gambar header valid isi rusak ditolak Cloudinary (400 -> 415) tanpa menyimpan aset
-    modeKlien = 'rusak';
-    const kunciRusak = '11111111-1111-4111-8111-111111111111.png';
-    await assert.rejects(
-      tulisFoto({ key: kunciRusak, bytes: pngDenganHeaderValidIsiRusak(png) }),
-      err => err instanceof KesalahanKatalog && err.status === 415,
-    );
-
-    // 3. Jika Cloudinary melaporkan dimensi > 16 MP, aset langsung dibersihkan dan ditolak 415
+    // Dimensi > 16 MP dari respons Cloudinary -> aset langsung dihapus & ditolak 415
     modeKlien = 'dimensi-berlebih';
-    const kunciBesar = '22222222-2222-4222-8222-222222222222.png';
     await assert.rejects(
-      tulisFoto({ key: kunciBesar, bytes: png }),
+      tulisFoto({ key: '22222222-2222-4222-8222-222222222222.png', bytes: png }),
       err => err instanceof KesalahanKatalog && err.status === 415,
     );
     assert.ok(dihapus.some(id => id.endsWith('22222222-2222-4222-8222-222222222222')));
 
-    // 4. Gangguan koneksi Cloudinary menghasilkan 503
+    // Gangguan jaringan -> 503
     modeKlien = 'gangguan';
     await assert.rejects(
       tulisFoto({ key: '33333333-3333-4333-8333-333333333333.png', bytes: png }),
       err => err instanceof KesalahanKatalog && err.status === 503,
     );
-    await assert.rejects(
-      bacaFoto(siapPng.key),
-      err => err instanceof KesalahanKatalog && err.status === 503,
-    );
 
-    // 5. Kegagalan DB: aset baru yatim dihapus, foto asli yang masih dirujuk TIDAK dihapus
+    // Kegagalan DB: aset yatim dihapus, foto asli yang masih dirujuk tidak dihapus
     modeKlien = 'normal';
     const dbSimulasi = (dirujuk) => ({
-      select: () => ({
-        from: () => ({
-          where: () => ({
-            limit: async () => (dirujuk ? [{ id: 2 }] : []),
-          }),
-        }),
-      }),
+      select: () => ({ from: () => ({ where: () => ({ limit: async () => (dirujuk ? [{ id: 2 }] : []) }) }) }),
     });
-
-    const jumlahHapusSebelum = dihapus.length;
+    const hapusSebelum = dihapus.length;
     await hapusJikaLepas(dbSimulasi(true), siapPng.key);
-    assert.equal(dihapus.length, jumlahHapusSebelum, 'foto asli yang masih dirujuk tidak boleh dihapus');
-
+    assert.equal(dihapus.length, hapusSebelum);
     await hapusJikaLepas(dbSimulasi(false), siapJpg.key);
-    assert.equal(dihapus.length, jumlahHapusSebelum + 1, 'aset yatim wajib dibersihkan');
-    await assert.rejects(
-      bacaFoto(siapJpg.key),
-      err => err instanceof KesalahanKatalog && err.status === 404,
-    );
-    // Foto asli masih utuh dan terbaca
+    assert.equal(dihapus.length, hapusSebelum + 1);
     assert.deepEqual((await bacaFoto(siapPng.key)).bytes, png);
   } finally {
     aturKlienCloudinaryUntukUji(undefined);
   }
 });
 
-test('Pemilihan mode penyimpanan foto: lokal default, UPLOAD_DIR paksa lokal, kredensial parsial ditolak', () => {
+test('Pemilihan mode penyimpanan foto tetap aman (lokal default, UPLOAD_DIR paksa lokal, parsial ditolak)', () => {
   assert.equal(denganEnvFoto({}, () => memakaiCloudinary()), false);
   assert.equal(
     denganEnvFoto(

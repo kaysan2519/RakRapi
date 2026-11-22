@@ -188,7 +188,7 @@ function klienCloudinaryAktif(): KlienCloudinary {
 }
 
 export async function siapkanFoto(file: Express.Multer.File) {
-  const ekstensi = await periksaFoto(file, { pakaiCloudinary: memakaiCloudinary() });
+  const ekstensi = await periksaFoto(file);
   const key = randomUUID() + "." + ekstensi;
   return { key, bytes: file.buffer };
 }
