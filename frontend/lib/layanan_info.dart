@@ -41,7 +41,7 @@ class _LayarLayananInfoState extends State<LayarLayananInfo> {
   String get _subjudul => switch (widget.jenis) {
     JenisLayanan.lowongan => 'Temukan kesempatan kerja di toko RakRapi.',
     JenisLayanan.bansos =>
-      'Lihat program bantuan sosial (demo), persyaratan, dan status pengajuan.',
+      'Lihat program bantuan sosial, persyaratan, dan status pengajuan.',
     JenisLayanan.pengumuman =>
       'Informasi terbaru dan pengumuman promo toko. Info diskon tidak mengubah harga katalog.',
   };
@@ -443,7 +443,7 @@ class _LayarLayananInfoState extends State<LayarLayananInfo> {
                   if (widget.jenis == JenisLayanan.bansos) ...[
                     const SizedBox(height: 6),
                     const Text(
-                      'Program bansos demo — verifikasi manual oleh pemilik toko, tidak menjamin penerimaan.',
+                      'Verifikasi dilakukan manual oleh pemilik toko; pengajuan tidak menjamin penerimaan.',
                       style: TextStyle(fontSize: 11, color: teksRedup),
                     ),
                   ],

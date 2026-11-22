@@ -92,27 +92,31 @@ app.use("/api/dashboard", dashboardRouter);
 8. **Contoh pertanyaan penguji:** *Mengapa logika database dipisah dari Controller ke Service?*
 9. **Jawaban singkat:** Supaya kode mudah dibaca, mudah diuji, dan satu fungsi service dapat dipakai ulang tanpa mengulang query di controller.
 
-### 2.4 Register, Login, `bcryptjs`, JWT, & Middleware Role
-1. **Nama file:** `akun.routes.ts`, `akun.controller.ts`, `akun.service.ts`, `akses.middleware.ts`
-2. **Lokasi file:** `backend/src/routes/akun.routes.ts`, `backend/src/services/akun.service.ts`, `backend/src/middleware/akses.middleware.ts`
-3. **Nomor baris aktual:** `akun.routes.ts` baris `12–17`; `akun.service.ts` baris `22–125`; `akses.middleware.ts` baris `5–30`
+### 2.4 Register, Login, `bcryptjs`, JWT, Middleware Role, & Pemberhentian Pegawai
+1. **Nama file:** `akun.routes.ts`, `akun.controller.ts`, `akun.service.ts`, `akses.middleware.ts`, `pengelolaan_toko.dart`
+2. **Lokasi file:** `backend/src/routes/akun.routes.ts`, `backend/src/services/akun.service.ts`, `backend/src/middleware/akses.middleware.ts`, `frontend/lib/pengelolaan_toko.dart`
+3. **Nomor baris aktual:** `akun.routes.ts` baris `19–31`; `akun.service.ts` baris `59–150`; `akses.middleware.ts` baris `5–26`
 4. **Potongan kode inti:**
 ```ts
-// backend/src/routes/akun.routes.ts (baris 12-14)
+// backend/src/routes/akun.routes.ts (baris 20-30)
 akunRouter.post("/register", buatAkun("warga"));
 akunRouter.get("/pegawai", perluLogin, perluRole("pemilik"), listPegawai);
+akunRouter.get("/pegawai/:id", perluLogin, perluRole("pemilik"), detailPegawai);
 akunRouter.post("/pegawai", perluLogin, perluRole("pemilik"), buatAkun("pegawai"));
+akunRouter.patch("/pegawai/:id/berhentikan", perluLogin, perluRole("pemilik"), nonaktifkanPegawai);
 ```
 ```ts
-// backend/src/services/akun.service.ts (baris 28-31 & 86-93)
-const hash = await bcrypt.hash(password, saltRounds());
-const [hasil] = await db.insert(users).values({ nama, email, passwordHash: hash, role });
+// backend/src/middleware/akses.middleware.ts (baris 17-22)
+if (profil.status !== "aktif") {
+  res.status(401).json({ pesan: "Akses dicabut. Akun pegawai ini telah diberhentikan." });
+  return;
+}
 ```
-5. **Fungsi kode:** Register publik selalu menetapkan role `warga` dan menyimpan password dalam bentuk hash `bcryptjs` (cost 12). Login mencocokkan sandi dengan `bcrypt.compare()` dan menerbitkan JWT `HS256` (masa berlaku 1 jam). `perluLogin` memverifikasi token lalu mengambil role terbaru dari tabel `users`, sedangkan `perluRole(...)` menolak role tidak berwenang dengan HTTP `403`.
-6. **Alur input → output:** `{ email, password }` → `200 { token, user }` (atau `401` bila salah).
-7. **Hubungan dengan database:** Membaca/menulis tabel `users` (kolom `email UNIQUE`, `password_hash`, `role`).
-8. **Contoh pertanyaan penguji:** *Apa yang terjadi jika pembeli mencoba mengirim `"role": "pemilik"` saat register?*
-9. **Jawaban singkat:** Diabaikan karena route `/api/auth/register` langsung memanggil `buatAkun("warga")`, bukan membaca role dari request client.
+5. **Fungsi kode:** Register publik selalu menetapkan role `warga` dan menyimpan password dalam bentuk hash `bcryptjs` (cost 12). Login mencocokkan sandi dengan `bcrypt.compare()`, menolak akun berstatus `diberhentikan` (`403`), dan menerbitkan JWT `HS256` (1 jam). `perluLogin` mengecek `status === "aktif"` langsung ke MySQL pada setiap request sehingga token lama pegawai yang baru diberhentikan langsung ditolak (`401`). Pemberhentian hanya mengubah status + menyimpan alasan & tanggal (tanpa `DELETE` permanen) dan memblokir pemberhentian akun pemilik/pembeli (`403`).
+6. **Alur input → output:** `PATCH /api/auth/pegawai/:id/berhentikan` `{ alasan }` → `200 { data }` (`status: "diberhentikan"`), selanjutnya login pegawai → `403` dan request token lama → `401`.
+7. **Hubungan dengan database:** Membaca/menulis tabel `users` (`email UNIQUE`, `password_hash`, `role`, `status`, `alasan_pemberhentian`, `diberhentikan_pada`).
+8. **Contoh pertanyaan penguji:** *Bagaimana jika pegawai yang baru diberhentikan masih memiliki token JWT aktif di HP-nya?*
+9. **Jawaban singkat:** Middleware `perluLogin` selalu membaca `status` terbaru dari tabel `users` MySQL pada setiap request, jadi token lama langsung ditolak HTTP `401` dan Flutter otomatis mengeluarkan sesi ke layar Masuk.
 
 ### 2.5 CRUD Kategori, Produk (`INNER JOIN`), Pencarian, & Filter
 1. **Nama file:** `kategori.service.ts`, `barang.service.ts`, `barang.validation.ts`

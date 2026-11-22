@@ -94,9 +94,9 @@ export async function ambilInfoToko() {
   const [row] = await db.select().from(infoToko).where(eq(infoToko.id, 1)).limit(1);
   if (!row) {
     return {
-      nama_toko: "Toko Sembako RakRapi (Demo)",
+      nama_toko: "Toko Sembako RakRapi",
       alamat: "",
-      jam_operasional: "Buka setiap hari · 07.00–21.00 (Demo)",
+      jam_operasional: "",
       kontak: "",
       info_pengambilan: "Ambil di kasir toko setelah status pesanan Siap diambil.",
       rekening_tersedia: false,
@@ -191,7 +191,10 @@ export async function ambilRingkasanDashboard() {
   ] = await Promise.all([
     db.select({ c: sql<number>`COUNT(*)` }).from(barang),
     db.select({ c: sql<number>`COUNT(*)` }).from(kategori),
-    db.select({ c: sql<number>`COUNT(*)` }).from(users).where(eq(users.role, "pegawai")),
+    db
+      .select({ c: sql<number>`COUNT(*)` })
+      .from(users)
+      .where(and(eq(users.role, "pegawai"), eq(users.status, "aktif"))),
     db.select({ c: sql<number>`COUNT(*)` }).from(barang).where(lte(barang.stok, "5.000")),
     db.select({ c: sql<number>`COUNT(*)` }).from(pesanan).where(eq(pesanan.status, "Menunggu konfirmasi")),
     db.select({ c: sql<number>`COUNT(*)` }).from(pesanan).where(sql`${pesanan.status} IN ('Dikonfirmasi', 'Siap diambil')`),

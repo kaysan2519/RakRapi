@@ -159,6 +159,7 @@ class LayarPegawai extends StatefulWidget {
 
 class _LayarPegawaiState extends State<LayarPegawai> {
   late Future<List<Json>> _future = widget.api.daftarPegawai();
+  String _filterStatus = 'aktif';
 
   void muat() {
     setState(() {
@@ -180,10 +181,21 @@ class _LayarPegawaiState extends State<LayarPegawai> {
     );
     if (mounted && email != null) {
       muat();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Akun pegawai $email dibuat.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Akun pegawai $email dibuat.')));
     }
+  }
+
+  Future<void> bukaDetail(Json pegawai) async {
+    final berubah = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            DetailPegawai(api: widget.api, id: pegawai['id'] as int),
+      ),
+    );
+    if (mounted && berubah == true) muat();
   }
 
   @override
@@ -199,70 +211,462 @@ class _LayarPegawaiState extends State<LayarPegawai> {
       ],
     ),
     body: SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-            child: FilledButton.icon(
-              onPressed: tambahPegawai,
-              icon: const Icon(Icons.person_add_alt_1),
-              label: const Text('Tambah pegawai'),
+      child: FutureBuilder<List<Json>>(
+        future: _future,
+        builder: (context, snap) {
+          if (snap.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snap.hasError) {
+            return Center(
+              child: PesanGagal(snap.error.toString(), ulangi: muat),
+            );
+          }
+          final semua = snap.requireData;
+          final daftarAktif = semua
+              .where((p) => (p['status'] ?? 'aktif') == 'aktif')
+              .toList();
+          final daftarDiberhentikan = semua
+              .where((p) => p['status'] == 'diberhentikan')
+              .toList();
+          final terlihat = _filterStatus == 'aktif'
+              ? daftarAktif
+              : daftarDiberhentikan;
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+                child: FilledButton.icon(
+                  onPressed: tambahPegawai,
+                  icon: const Icon(Icons.person_add_alt_1),
+                  label: const Text('Tambah pegawai'),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Row(
+                  children: [
+                    ChoiceChip(
+                      label: Text('Aktif (${daftarAktif.length})'),
+                      selected: _filterStatus == 'aktif',
+                      showCheckmark: false,
+                      labelStyle: TextStyle(
+                        color: _filterStatus == 'aktif'
+                            ? Colors.white
+                            : hijauTua,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      onSelected: (_) =>
+                          setState(() => _filterStatus = 'aktif'),
+                    ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: Text(
+                        'Diberhentikan (${daftarDiberhentikan.length})',
+                      ),
+                      selected: _filterStatus == 'diberhentikan',
+                      showCheckmark: false,
+                      labelStyle: TextStyle(
+                        color: _filterStatus == 'diberhentikan'
+                            ? Colors.white
+                            : hijauTua,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      onSelected: (_) =>
+                          setState(() => _filterStatus = 'diberhentikan'),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: terlihat.isEmpty
+                    ? Center(
+                        child: KeadaanKosong(
+                          ikon: Icons.badge_outlined,
+                          judul: _filterStatus == 'aktif'
+                              ? 'Belum ada pegawai aktif'
+                              : 'Belum ada pegawai diberhentikan',
+                          penjelasan: _filterStatus == 'aktif'
+                              ? 'Tambahkan akun pegawai agar staf dapat mengelola stok dan pesanan.'
+                              : 'Riwayat pegawai yang diberhentikan akan tersimpan di sini beserta alasan dan tanggalnya.',
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                        itemCount: terlihat.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 10),
+                        itemBuilder: (_, i) {
+                          final p = terlihat[i];
+                          final diberhentikan = p['status'] == 'diberhentikan';
+                          final tgl = formatTanggalSingkat(
+                            p['diberhentikan_pada']?.toString(),
+                          );
+                          return Card(
+                            child: ListTile(
+                              onTap: () => bukaDetail(p),
+                              leading: CircleAvatar(
+                                backgroundColor: diberhentikan
+                                    ? latarPeringatan
+                                    : hijauLembut,
+                                child: Icon(
+                                  diberhentikan
+                                      ? Icons.person_off_outlined
+                                      : Icons.person_outline,
+                                  color: diberhentikan
+                                      ? merahPeringatan
+                                      : hijauUtama,
+                                ),
+                              ),
+                              title: Text(
+                                p['nama'].toString(),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    p['email'].toString(),
+                                    style: const TextStyle(color: teksRedup),
+                                  ),
+                                  if (diberhentikan && tgl.isNotEmpty)
+                                    Text(
+                                      'Diberhentikan: $tgl',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: merahPeringatan,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  BadgeLabel(
+                                    diberhentikan ? 'Diberhentikan' : 'Aktif',
+                                    latar: diberhentikan
+                                        ? latarPeringatan
+                                        : hijauLembut,
+                                    warnaTeks: diberhentikan
+                                        ? merahPeringatan
+                                        : hijauUtama,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  const Icon(
+                                    Icons.chevron_right,
+                                    color: teksRedup,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          );
+        },
+      ),
+    ),
+  );
+}
+
+class DetailPegawai extends StatefulWidget {
+  const DetailPegawai({super.key, required this.api, required this.id});
+  final RakRapiApi api;
+  final int id;
+
+  @override
+  State<DetailPegawai> createState() => _DetailPegawaiState();
+}
+
+class _DetailPegawaiState extends State<DetailPegawai> {
+  late Future<Json> _future = widget.api.detailPegawai(widget.id);
+  bool sibuk = false;
+  bool adaPerubahan = false;
+  String? pesan;
+
+  void muat() {
+    setState(() {
+      _future = widget.api.detailPegawai(widget.id);
+      pesan = null;
+    });
+  }
+
+  Future<void> bukaDialogBerhentikan(Json pegawai) async {
+    if (sibuk) return;
+    final alasan = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _DialogBerhentikanPegawai(pegawai: pegawai),
+    );
+    if (!mounted || alasan == null) return;
+
+    setState(() {
+      sibuk = true;
+      pesan = null;
+    });
+    try {
+      final diperbarui = await widget.api.berhentikanPegawai(widget.id, alasan);
+      if (mounted) {
+        adaPerubahan = true;
+        setState(() {
+          _future = Future.value(diperbarui);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Pegawai ${pegawai['nama']} diberhentikan. Akses aplikasi dicabut.',
             ),
           ),
-          Expanded(
-            child: FutureBuilder<List<Json>>(
-              future: _future,
-              builder: (context, snap) {
-                if (snap.connectionState != ConnectionState.done) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snap.hasError) {
-                  return Center(
-                    child: PesanGagal(snap.error.toString(), ulangi: muat),
-                  );
-                }
-                final daftar = snap.requireData;
-                if (daftar.isEmpty) {
-                  return const Center(
-                    child: KeadaanKosong(
-                      ikon: Icons.badge_outlined,
-                      judul: 'Belum ada akun pegawai',
-                      penjelasan: 'Tambahkan akun pegawai agar staf dapat mengelola stok dan pesanan.',
-                    ),
-                  );
-                }
-                return ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-                  itemCount: daftar.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 10),
-                  itemBuilder: (_, i) {
-                    final p = daftar[i];
-                    return Card(
-                      child: ListTile(
-                        leading: const CircleAvatar(
-                          backgroundColor: hijauLembut,
-                          child: Icon(Icons.person_outline, color: hijauUtama),
-                        ),
-                        title: Text(
-                          p['nama'],
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        subtitle: Text(
-                          p['email'],
-                          style: const TextStyle(color: teksRedup),
-                        ),
-                        trailing: const BadgeLabel('Pegawai'),
+        );
+      }
+    } catch (e) {
+      if (mounted) setState(() => pesan = e.toString());
+    } finally {
+      if (mounted) setState(() => sibuk = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+    canPop: !sibuk,
+    onPopInvokedWithResult: (didPop, _) {
+      if (didPop) return;
+    },
+    child: Scaffold(
+      appBar: AppBar(
+        title: const Text('Detail pegawai'),
+        leading: IconButton(
+          tooltip: 'Kembali',
+          onPressed: sibuk ? null : () => Navigator.pop(context, adaPerubahan),
+          icon: const Icon(Icons.arrow_back),
+        ),
+      ),
+      body: FutureBuilder<Json>(
+        future: _future,
+        builder: (context, snap) {
+          if (snap.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snap.hasError) {
+            return Center(
+              child: PesanGagal(snap.error.toString(), ulangi: muat),
+            );
+          }
+          final p = snap.requireData;
+          final diberhentikan = p['status'] == 'diberhentikan';
+          final tgl = formatTanggalSingkat(p['diberhentikan_pada']?.toString());
+          final alasan = (p['alasan_pemberhentian'] ?? '').toString().trim();
+
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 28,
+                            backgroundColor: diberhentikan
+                                ? latarPeringatan
+                                : hijauLembut,
+                            child: Icon(
+                              diberhentikan
+                                  ? Icons.person_off_outlined
+                                  : Icons.person_outline,
+                              size: 28,
+                              color: diberhentikan
+                                  ? merahPeringatan
+                                  : hijauUtama,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  p['nama'].toString(),
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                Text(
+                                  p['email'].toString(),
+                                  style: const TextStyle(color: teksRedup),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                    );
-                  },
-                );
-              },
+                      const Divider(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Status akun',
+                            style: TextStyle(color: teksRedup),
+                          ),
+                          BadgeLabel(
+                            diberhentikan ? 'Diberhentikan' : 'Aktif',
+                            latar: diberhentikan
+                                ? latarPeringatan
+                                : hijauLembut,
+                            warnaTeks: diberhentikan
+                                ? merahPeringatan
+                                : hijauUtama,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      _barisInfo('Peran', 'Pegawai operasional toko'),
+                      if (diberhentikan) ...[
+                        _barisInfo(
+                          'Tanggal pemberhentian',
+                          tgl.isEmpty ? '-' : tgl,
+                        ),
+                        _barisInfo(
+                          'Alasan pemberhentian',
+                          alasan.isEmpty ? '-' : alasan,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              if (diberhentikan)
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: latarPeringatan,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Text(
+                    'Pegawai ini sudah diberhentikan. Akun tidak dapat login dan seluruh token lama ditolak, namun catatan akun serta riwayat transaksi tetap dipertahankan di database.',
+                    style: TextStyle(fontSize: 12, color: merahPeringatan),
+                  ),
+                )
+              else ...[
+                if (pesan != null) PesanGagal(pesan!),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: merahPeringatan,
+                  ),
+                  onPressed: sibuk ? null : () => bukaDialogBerhentikan(p),
+                  icon: const Icon(Icons.person_off_outlined),
+                  label: Text(
+                    sibuk ? 'Memproses…' : 'Berhentikan Pegawai',
+                  ),
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+    ),
+  );
+}
+
+String formatTanggalSingkat(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return '';
+  final dt = DateTime.tryParse(raw.replaceFirst(' ', 'T'));
+  if (dt == null) return raw;
+  final lokal = dt.toLocal();
+  final d = lokal.day.toString().padLeft(2, '0');
+  final m = lokal.month.toString().padLeft(2, '0');
+  final y = lokal.year.toString();
+  final hh = lokal.hour.toString().padLeft(2, '0');
+  final mm = lokal.minute.toString().padLeft(2, '0');
+  return '$d/$m/$y $hh:$mm';
+}
+
+class _DialogBerhentikanPegawai extends StatefulWidget {
+  const _DialogBerhentikanPegawai({required this.pegawai});
+  final Json pegawai;
+
+  @override
+  State<_DialogBerhentikanPegawai> createState() =>
+      _DialogBerhentikanPegawaiState();
+}
+
+class _DialogBerhentikanPegawaiState extends State<_DialogBerhentikanPegawai> {
+  final alasanCtrl = TextEditingController();
+  String? errorDialog;
+
+  @override
+  void dispose() {
+    alasanCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Berhentikan Pegawai'),
+    content: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Anda akan memberhentikan ${widget.pegawai['nama']} (${widget.pegawai['email']}).',
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: latarPeringatan,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Text(
+              'Pegawai akan segera kehilangan akses aplikasi, tidak dapat login kembali, dan sesi yang masih aktif otomatis ditolak. Data akun serta riwayat transaksi tetap disimpan di database.',
+              style: TextStyle(fontSize: 12, color: merahPeringatan),
+            ),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: alasanCtrl,
+            maxLines: 3,
+            maxLength: 500,
+            decoration: InputDecoration(
+              labelText: 'Alasan pemberhentian',
+              hintText: 'Tuliskan alasan pemberhentian pegawai...',
+              alignLabelWithHint: true,
+              errorText: errorDialog,
             ),
           ),
         ],
       ),
     ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Batal'),
+      ),
+      FilledButton(
+        style: FilledButton.styleFrom(backgroundColor: merahPeringatan),
+        onPressed: () {
+          final teks = alasanCtrl.text.trim();
+          if (teks.isEmpty) {
+            setState(() => errorDialog = 'Alasan pemberhentian wajib diisi.');
+            return;
+          }
+          Navigator.pop(context, teks);
+        },
+        child: const Text('Berhentikan Pegawai'),
+      ),
+    ],
   );
 }
 

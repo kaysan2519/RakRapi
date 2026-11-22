@@ -14,6 +14,12 @@ export const perluLogin: RequestHandler = async (req, res, next) => {
     res.status(401).json({ pesan: "Silakan masuk kembali." });
     return;
   }
+  if (profil.status !== "aktif") {
+    res.status(401).json({
+      pesan: "Akses dicabut. Akun pegawai ini telah diberhentikan.",
+    });
+    return;
+  }
 
   res.locals.user = profil;
   next();

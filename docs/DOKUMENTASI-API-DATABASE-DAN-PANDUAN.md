@@ -13,7 +13,7 @@ Database dijalankan pada **MySQL 8.4.11 (Aiven `TLSv1.3` — target runtime akti
 
 | No | Tabel | Primary Key | Foreign Key & Relasi | Constraint & Catatan Penting |
 |---:|---|---|---|---|
-| 1 | `users` | `id` (`INT UNSIGNED AI`) | — | `email UNIQUE`, `role IN ('pemilik','pegawai','warga')`, `password_hash` (`bcryptjs`) |
+| 1 | `users` | `id` (`INT UNSIGNED AI`) | — | `email UNIQUE`, `role IN ('pemilik','pegawai','warga')`, `password_hash` (`bcryptjs`), `status ENUM('aktif','diberhentikan') DEFAULT 'aktif'`, `alasan_pemberhentian`, `diberhentikan_pada` |
 | 2 | `kategori` | `id` (`INT UNSIGNED AI`) | — | `nama UNIQUE`, `CHAR_LENGTH(TRIM(nama)) > 0` |
 | 3 | `barang` | `id` (`INT UNSIGNED AI`) | `fk_barang_kategori`: `kategori_id → kategori.id` (`ON DELETE RESTRICT`) | `stok >= 0`, 9 satuan valid (`botol`, `kg`, `pcs`, `bungkus`, `pack`, `sisir`, `kotak`, `lembar`, `sachet`), `satuan = 'kg' OR stok = FLOOR(stok)`, kolom `deskripsi` |
 | 4 | `pesanan` | `id` (`INT UNSIGNED AI`) | `pesanan_ibfk_1`: `warga_id → users.id` (`ON DELETE RESTRICT`) | `UNIQUE (warga_id, kunci_kirim)`, `status` (`Menunggu konfirmasi`, `Dikonfirmasi`, `Siap diambil`, `Selesai`), `metode_pembayaran` (`Bayar di kasir`, `Transfer bank`), `status_pembayaran` (`Belum dibayar`, `Sudah dibayar`) |
@@ -32,7 +32,8 @@ Database dijalankan pada **MySQL 8.4.11 (Aiven `TLSv1.3` — target runtime akti
 4. `backend/database/05_lowongan.sql`
 5. `backend/database/06_pesanan.sql`
 6. `backend/database/07_v3_fitur.sql` *(migrasi non-destruktif V3)*
-7. `backend/database/08_seed_demo_v3.sql` *(opsional — seed idempoten demo V3)*
+7. `backend/database/08_seed_demo_v3.sql` *(opsional — seed demo V3)*
+8. `backend/database/09_pemberhentian_pegawai.sql` *(status akun, alasan, & tanggal pemberhentian pegawai)*
 
 ### C. Akun Runtime Database
 - **Aiven (Aktif di `backend/.env`):** 1 akun non-admin `rakrapi_app@%` (`REQUIRE SSL`, izin `SELECT, INSERT, UPDATE, DELETE ON rakrapi.*` + `EXECUTE ON PROCEDURE rakrapi.tambah_pegawai`, bukan `avnadmin`) dengan `DB_SSL=true` dan `DB_SSL_CA_BASE64`.
@@ -51,8 +52,10 @@ Seluruh endpoint privat mewajibkan header `Authorization: Bearer <token>` (JWT H
 | **Auth** | `POST /api/auth/login` | Publik | Login satu pintu 3 role; terbitkan JWT HS256 (`200`, `401`) |
 | **Auth** | `GET /api/auth/me` | 3 role | Profil akun terkini dari MySQL (`200`, `401`) |
 | **Auth** | `GET /api/auth/pemilik` | `pemilik` | Uji otorisasi khusus pemilik (`200`, `403`) |
-| **Pegawai** | `GET /api/auth/pegawai` | `pemilik` | Daftar akun pegawai aktual dari tabel `users` (`200`, `403`) |
+| **Pegawai** | `GET /api/auth/pegawai` | `pemilik` | Daftar pegawai (mendukung `?status=aktif\|diberhentikan`) beserta status, alasan, dan tanggal pemberhentian (`200`, `403`) |
+| **Pegawai** | `GET /api/auth/pegawai/:id` | `pemilik` | Detail 1 akun pegawai (`200`, `403`, `404`) |
 | **Pegawai** | `POST /api/auth/pegawai` | `pemilik` | Buat akun pegawai baru (`201`, `400`, `403`, `409`) |
+| **Pegawai** | `PATCH /api/auth/pegawai/:id/berhentikan` | `pemilik` | Berhentikan pegawai non-permanen (`{ alasan }`), cabut login & token JWT aktif, tolak target pemilik/warga (`200`, `400`, `403`, `404`, `409`) |
 | **Kategori** | `GET /api/kategori` | 3 role | Daftar kategori + `jumlah_produk` via `LEFT JOIN` + `COUNT` (`200`) |
 | **Kategori** | `GET /api/kategori/:id` | `pemilik` | Detail 1 kategori (`200`, `404`) |
 | **Kategori** | `POST /api/kategori` | `pemilik` | Tambah kategori baru (`201`, `400`, `409`) |

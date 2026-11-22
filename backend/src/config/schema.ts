@@ -17,6 +17,9 @@ export const users = mysqlTable("users", {
   email: varchar("email", { length: 255 }).notNull(),
   passwordHash: varchar("password_hash", { length: 255 }).notNull(),
   role: varchar("role", { length: 10, enum: ["pemilik", "pegawai", "warga"] }).notNull(),
+  status: mysqlEnum("status", ["aktif", "diberhentikan"]).notNull().default("aktif"),
+  alasan_pemberhentian: varchar("alasan_pemberhentian", { length: 500 }),
+  diberhentikan_pada: datetime("diberhentikan_pada", { mode: "string" }),
 });
 
 export type Role = typeof users.$inferSelect.role;
@@ -150,9 +153,9 @@ export const pengumuman = mysqlTable("pengumuman", {
 
 export const infoToko = mysqlTable("info_toko", {
   id: tinyint("id", { unsigned: true }).primaryKey(),
-  nama_toko: varchar("nama_toko", { length: 150 }).notNull().default("Toko Sembako RakRapi (Demo)"),
+  nama_toko: varchar("nama_toko", { length: 150 }).notNull().default("Toko Sembako RakRapi"),
   alamat: varchar("alamat", { length: 300 }).notNull().default(""),
-  jam_operasional: varchar("jam_operasional", { length: 150 }).notNull().default("Buka setiap hari · 07.00–21.00 (Demo)"),
+  jam_operasional: varchar("jam_operasional", { length: 150 }).notNull().default(""),
   kontak: varchar("kontak", { length: 100 }).notNull().default(""),
   info_pengambilan: varchar("info_pengambilan", { length: 300 }).notNull().default("Ambil di kasir toko setelah status pesanan Siap diambil."),
   nama_bank: varchar("nama_bank", { length: 100 }),

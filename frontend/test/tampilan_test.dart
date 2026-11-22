@@ -10,6 +10,7 @@ import 'package:rakrapi/katalog.dart';
 import 'package:rakrapi/keranjang.dart';
 import 'package:rakrapi/lowongan.dart';
 import 'package:rakrapi/main.dart';
+import 'package:rakrapi/pengelolaan_toko.dart';
 import 'package:rakrapi/theme/app_theme.dart';
 
 // Fixture hanya untuk tes widget. Tidak menghubungi API atau mengisi MySQL.
@@ -54,6 +55,37 @@ class ApiTampilanUji extends RakRapiApi {
   ];
   final fotoDiminta = <String>[];
   int permintaanDaftar = 0;
+  List<Json> pegawaiList = [
+    {
+      'id': 10,
+      'nama': 'Pegawai Aktif Uji',
+      'email': 'staf@uji.test',
+      'role': 'pegawai',
+      'status': 'aktif',
+      'alasan_pemberhentian': null,
+      'diberhentikan_pada': null,
+    },
+  ];
+
+  @override
+  Future<List<Json>> daftarPegawai() async => pegawaiList;
+
+  @override
+  Future<Json> detailPegawai(int id) async =>
+      pegawaiList.firstWhere((p) => p['id'] == id);
+
+  @override
+  Future<Json> berhentikanPegawai(int id, String alasan) async {
+    final idx = pegawaiList.indexWhere((p) => p['id'] == id);
+    final updated = {
+      ...pegawaiList[idx],
+      'status': 'diberhentikan',
+      'alasan_pemberhentian': alasan,
+      'diberhentikan_pada': '2026-11-22 18:10:00',
+    };
+    pegawaiList[idx] = updated;
+    return updated;
+  }
 
   @override
   Future<List<Json>> daftarBarang({String? q, int? kategoriId}) async {
@@ -337,4 +369,63 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'Pemilik melihat detail pegawai, dialog konfirmasi wajib alasan, lalu status berubah diberhentikan',
+    (tester) async {
+      final api = ApiTampilanUji();
+      await buka(tester, LayarPegawai(api: api));
+      expect(find.text('Aktif (1)'), findsOneWidget);
+      expect(find.text('Diberhentikan (0)'), findsOneWidget);
+      expect(find.text('Pegawai Aktif Uji'), findsOneWidget);
+
+      await tester.tap(find.text('Pegawai Aktif Uji'));
+      await tester.pumpAndSettle();
+      expect(find.text('Detail pegawai'), findsOneWidget);
+      expect(find.text('Berhentikan Pegawai'), findsOneWidget);
+
+      await tester.tap(find.text('Berhentikan Pegawai'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('kehilangan akses aplikasi'),
+        findsOneWidget,
+      );
+
+      // Coba kirim tanpa alasan -> harus muncul pesan validasi
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.widgetWithText(FilledButton, 'Berhentikan Pegawai'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Alasan pemberhentian wajib diisi.'), findsOneWidget);
+
+      // Isi alasan dan konfirmasi
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Alasan pemberhentian'),
+        'Kontrak kerja selesai.',
+      );
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.widgetWithText(FilledButton, 'Berhentikan Pegawai'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Diberhentikan'), findsOneWidget);
+      expect(find.text('Kontrak kerja selesai.'), findsOneWidget);
+      expect(find.text('Berhentikan Pegawai'), findsNothing);
+
+      // Kembali ke daftar -> pindah ke tab Diberhentikan
+      await tester.tap(find.byTooltip('Kembali'));
+      await tester.pumpAndSettle();
+      expect(find.text('Aktif (0)'), findsOneWidget);
+      expect(find.text('Diberhentikan (1)'), findsOneWidget);
+      await tester.tap(find.text('Diberhentikan (1)'));
+      await tester.pumpAndSettle();
+      expect(find.text('Pegawai Aktif Uji'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

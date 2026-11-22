@@ -18,6 +18,9 @@ erDiagram
         VARCHAR email UK "NOT NULL UNIQUE (255)"
         VARCHAR password_hash "NOT NULL (255, bcryptjs)"
         VARCHAR role "NOT NULL DEFAULT warga (pemilik|pegawai|warga)"
+        ENUM status "NOT NULL DEFAULT aktif (aktif|diberhentikan)"
+        VARCHAR alasan_pemberhentian "NULL (500)"
+        DATETIME diberhentikan_pada "NULL"
     }
 
     kategori {
@@ -303,4 +306,5 @@ classDiagram
 | 9 | Dashboard Statistik | `GET /api/dashboard` untuk pemilik/pegawai vs warga (403) | Seluruh angka berasal dari `COUNT(*)` SQL aktual | Lulus (`jumlah_produk: 18, jumlah_kategori: 10, jumlah_pegawai: 1, jumlah_pin_aktif: 2`) | **LULUS** |
 | 10 | Flutter Analyze & Widget Tests | `flutter analyze --no-pub` & `flutter test --no-pub` | 0 issue lint, seluruh tes widget & sesi lulus | 0 issue; **20/20 tes Flutter lulus** (`sesi_test`, `tampilan_test`, `keranjang_test`, `form_barang_test`) | **LULUS** |
 | 11 | E2E Emulator Pixel 8 (Live Aiven) | Jalankan `v3_emulator_bukti_test.dart` pada `emulator-5554` terhubung backend Aiven + Cloudinary | Login/Register V3, Beranda Pembeli, Katalog, Detail ID 2, Dashboard Pemilik, Pin Prioritas, Dashboard Pegawai tampil tanpa error & overflow | Terverifikasi pada `Pixel_8` (`docs/bukti/v3-pixel8/01..08.png`) | **LULUS** |
-| 12 | Pengujian HP Fisik | Uji koneksi ADB pada HP fisik | Diuji bila perangkat terpasang | Perangkat HP fisik tidak terhubung saat sesi pengujian ini | **BELUM TERUJI DI HP FISIK** |
+| 12 | Pemberhentian Pegawai | Pemilik melihat detail & memberhentikan pegawai dengan alasan wajib; cek login pegawai (403), token JWT aktif lama (401), pembeli/pegawai diblokir (403), pemilik/warga tidak bisa diberhentikan (403), riwayat akun tetap ada | Akun berubah status `diberhentikan`, alasan & tanggal tersimpan, akses dicabut seketika, akun tidak dihapus permanen | Lulus penuh di `uji_backend_v3.cjs` (Test 13/13) & `tampilan_test.dart` (21/21 `flutter test`) | **LULUS** |
+| 13 | Pengujian HP Fisik | Uji koneksi ADB pada HP fisik | Diuji bila perangkat terpasang | Perangkat HP fisik tidak terhubung saat sesi pengujian ini | **BELUM TERUJI DI HP FISIK** |

@@ -168,6 +168,9 @@ class RakRapiApi {
   Future<List<Json>> daftarPegawai() async =>
       ((await _json('GET', '/auth/pegawai'))['data'] as List).cast<Json>();
 
+  Future<Json> detailPegawai(int id) async =>
+      (await _json('GET', '/auth/pegawai/$id'))['data'] as Json;
+
   Future<void> tambahPegawai(String nama, String email, String sandi) async {
     await _json(
       'POST',
@@ -175,6 +178,14 @@ class RakRapiApi {
       isi: {'nama': nama, 'email': email, 'password': sandi},
     );
   }
+
+  Future<Json> berhentikanPegawai(int id, String alasan) async =>
+      (await _json(
+            'PATCH',
+            '/auth/pegawai/$id/berhentikan',
+            isi: {'alasan': alasan},
+          ))['data']
+          as Json;
 
   // --- Barang & Kategori ---
   Future<List<Json>> daftarBarang({String? q, int? kategoriId}) async {

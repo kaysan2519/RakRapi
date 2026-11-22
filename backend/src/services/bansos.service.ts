@@ -82,7 +82,7 @@ export async function simpanProgramBansos(
   const nama = namaValid(isian.nama ?? isian.judul ?? lama?.nama, 150, "Nama program");
   const deskripsi = teksOpsional(isian.deskripsi ?? lama?.deskripsi ?? "", 1000, "Deskripsi program");
   const jenis_bantuan = teksOpsional(
-    isian.jenis_bantuan ?? lama?.jenis_bantuan ?? "Bantuan warga (Demo)",
+    isian.jenis_bantuan ?? lama?.jenis_bantuan ?? "Bantuan warga",
     150,
     "Jenis bantuan",
   );

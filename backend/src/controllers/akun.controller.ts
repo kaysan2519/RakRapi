@@ -1,6 +1,13 @@
 import type { RequestHandler } from "express";
-import { daftarkanAkun, daftarPegawai, periksaLogin } from "../services/akun.service";
+import {
+  ambilDetailPegawai,
+  berhentikanPegawai,
+  daftarkanAkun,
+  daftarPegawai,
+  periksaLogin,
+} from "../services/akun.service";
 import { emailDari, validasiAkun } from "../validations/akun.validation";
+import { bilanganBulat, namaValid } from "../validations/umum.validation";
 
 export function buatAkun(role: "warga" | "pegawai"): RequestHandler {
   return async (req, res) => {
@@ -37,7 +44,23 @@ export const aksesPemilik: RequestHandler = (_req, res) => {
   res.json({ pesan: "Akses pemilik diterima." });
 };
 
-export const listPegawai: RequestHandler = async (_req, res) => {
-  const data = await daftarPegawai();
+export const listPegawai: RequestHandler = async (req, res) => {
+  const statusQuery = typeof req.query.status === "string" ? req.query.status.trim() : "";
+  const filter =
+    statusQuery === "aktif" || statusQuery === "diberhentikan" ? statusQuery : undefined;
+  const data = await daftarPegawai(filter);
+  res.json({ data });
+};
+
+export const detailPegawai: RequestHandler = async (req, res) => {
+  const id = bilanganBulat(req.params.id, 1, "ID pegawai");
+  const data = await ambilDetailPegawai(id);
+  res.json({ data });
+};
+
+export const nonaktifkanPegawai: RequestHandler = async (req, res) => {
+  const id = bilanganBulat(req.params.id, 1, "ID pegawai");
+  const alasan = namaValid(req.body?.alasan, 500, "Alasan pemberhentian");
+  const data = await berhentikanPegawai(id, alasan);
   res.json({ data });
 };
