@@ -160,9 +160,10 @@ stok kg boleh memiliki maksimal tiga desimal. Misalnya, stok `12` bersatuan
 PATCH menerima JSON, misalnya `{"harga_rupiah":20000,"stok":10}`. Untuk
 mengganti foto, gunakan PATCH multipart dengan file `foto` baru.
 
-Multer membatasi unggahan ke satu JPEG/PNG, maksimal 5 MiB. Validasi gambar di
-[foto.validation.ts](src/validations/foto.validation.ts) memeriksa MIME, penanda file,
-batas 16 megapiksel, dan dekode ketat tanpa mengubah byte foto asli. Jika
+Multer membatasi unggahan ke satu JPG/PNG/WebP, maksimal 5 MiB. Validasi gambar di
+[foto.validation.ts](src/validations/foto.validation.ts) memeriksa ukuran, kecocokan MIME dengan
+penanda biner (*magic bytes*), struktur chunk/marker (termasuk CRC32 PNG bawaan Node.js), dan
+batas 16 megapiksel tanpa mengubah byte foto asli maupun memakai library pengolah gambar eksternal. Jika
 `CLOUDINARY_*` terisi di `.env`, foto disimpan privat (`type: "authenticated"`) di
 Cloudinary dan disajikan melalui `GET /api/barang/:id/foto` yang mewajibkan JWT.
 Saat pengujian lokal dengan `UPLOAD_DIR`, foto disimpan di folder sementara lokal.

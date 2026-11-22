@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../config/db";
 import { barang, lowongan, pengumuman, programBansos } from "../config/schema";
 import { KesalahanKatalog } from "../middleware/error.middleware";
-import { periksaFoto } from "../validations/foto.validation";
+import { periksaFoto, pesanFotoTidakValid } from "../validations/foto.validation";
 
 // Nama file buatan backend: UUID versi 4 dengan ekstensi .jpg, .png, atau .webp.
 const polaKeyFoto = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(jpg|png|webp)$/;
@@ -99,7 +99,11 @@ export async function tulisFoto(foto: { key: string; bytes: Buffer }) {
       );
       stream.end(foto.bytes);
     });
-  } catch {
+  } catch (error) {
+    const statusCloud = (error as { http_code?: number } | null)?.http_code;
+    if (statusCloud === 400) {
+      throw new KesalahanKatalog(415, pesanFotoTidakValid);
+    }
     throw new KesalahanKatalog(503, "Penyimpanan foto belum tersedia.");
   }
 }

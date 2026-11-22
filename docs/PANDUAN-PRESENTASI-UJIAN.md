@@ -140,10 +140,10 @@ return db.select({
 ### 2.6 Upload Foto, Validasi, & Penyimpanan Cloudinary Privat
 1. **Nama file:** `upload.middleware.ts`, `foto.validation.ts`, `foto.service.ts`
 2. **Lokasi file:** `backend/src/middleware/upload.middleware.ts`, `backend/src/validations/foto.validation.ts`, `backend/src/services/foto.service.ts`
-3. **Nomor baris aktual:** `foto.validation.ts` baris `10–67`; `foto.service.ts` baris `69–145`
+3. **Nomor baris aktual:** `foto.validation.ts` baris `1–258`; `foto.service.ts` baris `66–159`
 4. **Potongan kode inti:**
 ```ts
-// backend/src/services/foto.service.ts (baris 84-90 & 114-119)
+// backend/src/services/foto.service.ts (baris 95-101 & 130-134)
 cloudinary.uploader.upload_stream(
   { public_id: publicId, resource_type: "image", type: "authenticated", overwrite: false }, ...
 );
@@ -151,7 +151,7 @@ const urlPrivat = cloudinary.utils.private_download_url(publicIdDariKey(key), ek
   resource_type: "image", type: "authenticated", expires_at: Math.floor(Date.now() / 1000) + 60,
 });
 ```
-5. **Fungsi kode:** Multer menerima 1 file maks 5 MiB di memori, `periksaFoto()` memvalidasi penanda biner JPG/PNG/WebP + dekode ketat Sharp (maks 16 MP), lalu `tulisFoto()` mengunggah ke Cloudinary mode privat (`authenticated`) dan menyimpan nama UUID di kolom `foto_key`.
+5. **Fungsi kode:** Multer menerima 1 file maks 5 MiB di memori, `periksaFoto()` memvalidasi kecocokan MIME dengan penanda biner (*magic bytes*), struktur chunk/marker (termasuk verifikasi `zlib.crc32` bawaan Node.js untuk PNG, marker SOF/SOS/EOI untuk JPEG, dan RIFF/VP8/VP8L/VP8X untuk WebP), serta batas dimensi 16 MP tanpa library pengolah gambar eksternal (`sharp` telah dihapus). Selanjutnya `tulisFoto()` mengunggah ke Cloudinary mode privat (`authenticated`, sekaligus memanfaatkan penolakan gambar tidak valid dari sisi Cloudinary) dan menyimpan nama UUID di kolom `foto_key`.
 6. **Alur input → output:** Multipart `foto` → tersimpan privat di Cloudinary → dibaca ulang lewat `/api/<modul>/:id/foto` dengan Bearer JWT.
 7. **Hubungan dengan database:** Kolom `foto_key` pada tabel `barang`, `lowongan`, `program_bansos`, dan `pengumuman`.
 8. **Contoh pertanyaan penguji:** *Mengapa foto tidak disimpan langsung di database atau URL publik?*
@@ -229,5 +229,5 @@ if (privat && tokenPermintaan != null) {
 | **`BigInt` Perhitungan Uang** | `pesanan.service.ts`, `keranjang.dart` | Menghitung subtotal & total rupiah presisi bulat tanpa error *floating-point* JavaScript. | Pembulatan `float` bisa selisih Rp1 atau salah hitung pada jumlah pecahan `kg`. |
 | **Idempotency (`kunci_kirim`)** | `pesanan.service.ts`, `keranjang.dart` | Kunci 32 hex unik per keranjang + `UNIQUE (warga_id, kunci_kirim)`. | Ketukan ganda saat sinyal lambat akan membuat 2 pesanan identik. |
 | **Unique & Check Constraints** | `01_skema.sql`–`07_v3_fitur.sql` | Menjaga email/kategori unik, stok `>= 0`, kuota `>= 1`, dan anti-duplikat lamaran/bansos di tingkat database. | Data korup (stok minus, lamaran ganda) tetap bisa masuk jika ada bug di aplikasi. |
-| **Validasi Foto Ketat (`sharp`)** | `foto.validation.ts` | Memastikan file benar-benar gambar JPG/PNG/WebP valid ≤ 16 MP sebelum disimpan. | File rusak atau skrip yang menyamar sebagai `.png` bisa lolos masuk ke penyimpanan. |
+| **Validasi Biner Foto Bawaan Node.js (`Buffer` + `zlib.crc32`)** | `foto.validation.ts` (`1–258`) | Memastikan file benar-benar gambar JPG/PNG/WebP valid ≤ 5 MiB & ≤ 16 MP (magic bytes, chunk/CRC32 PNG, marker SOF/SOS/EOI JPEG, RIFF/VP8/VP8L/VP8X WebP) tanpa library eksternal (`sharp` telah dihapus), ditambah verifikasi server-side Cloudinary saat mode produksi aktif. | File kosong, file menyamar sebagai `.png`, MIME palsu, dimensi > 16 MP, atau struktur gambar korup bisa lolos masuk ke penyimpanan. *(Catatan jujur: pemeriksaan struktur biner tidak setara dekode piksel penuh seperti libvips pada mode lokal tanpa Cloudinary.)* |
 | **Non-Destructive Migration** | `07_v3_fitur.sql`, `08_seed_demo_v3.sql` | Menambah kolom & tabel baru tanpa `DROP TABLE` / `TRUNCATE`. | Data asli toko (akun, produk ID 2, riwayat pesanan) akan hilang terhapus. |
