@@ -231,3 +231,12 @@ if (privat && tokenPermintaan != null) {
 | **Unique & Check Constraints** | `01_skema.sql`–`07_v3_fitur.sql` | Menjaga email/kategori unik, stok `>= 0`, kuota `>= 1`, dan anti-duplikat lamaran/bansos di tingkat database. | Data korup (stok minus, lamaran ganda) tetap bisa masuk jika ada bug di aplikasi. |
 | **Validasi Biner Foto Bawaan Node.js (`Buffer` + `zlib.crc32`)** | `foto.validation.ts` (`1–258`) | Memastikan file benar-benar gambar JPG/PNG/WebP valid ≤ 5 MiB & ≤ 16 MP (magic bytes, chunk/CRC32 PNG, marker SOF/SOS/EOI JPEG, RIFF/VP8/VP8L/VP8X WebP) tanpa library eksternal (`sharp` telah dihapus), ditambah verifikasi server-side Cloudinary saat mode produksi aktif. | File kosong, file menyamar sebagai `.png`, MIME palsu, dimensi > 16 MP, atau struktur gambar korup bisa lolos masuk ke penyimpanan. *(Catatan jujur: pemeriksaan struktur biner tidak setara dekode piksel penuh seperti libvips pada mode lokal tanpa Cloudinary.)* |
 | **Non-Destructive Migration** | `07_v3_fitur.sql`, `08_seed_demo_v3.sql` | Menambah kolom & tabel baru tanpa `DROP TABLE` / `TRUNCATE`. | Data asli toko (akun, produk ID 2, riwayat pesanan) akan hilang terhapus. |
+
+---
+
+## 4. Transparansi Data Operasional Saat Presentasi (Referensi Nyata vs Simulasi)
+
+Jika penguji bertanya *"Apakah katalog produk, lowongan kerja, dan program bansos di RakRapi ini data sungguhan?"*, jawab secara jujur dan terstruktur:
+
+- **Berbasis referensi pasar nyata:** 20 produk sembako lintas 10 kategori (masing-masing 2 produk) memakai nama produk dan merek yang benar-benar beredar di Indonesia, kisaran harga acuan pasar Depok/Jabodetabek, serta 30 foto produk & layanan asli di Cloudinary privat (3 foto asli toko ID 2/9/13 utuh + foto produk/operasional sah dari Open Food Facts, Wikimedia Commons, dan packshot resmi merek).
+- **Berstatus simulasi proyek UMKM Uji Level:** jumlah stok, skenario 3 lowongan kerja (`Staff Toko`, `Kasir`, `Petugas Gudang`), 3 program bantuan sosial warga (tercantum tegas bukan program pemerintah dan tidak mengumpulkan NIK/penghasilan fiktif), promo paket dapur kasir (harga katalog tetap reguler), serta alamat/kontak layanan kasir di `info_toko` (rekening transfer dinonaktifkan karena tidak memakai rekening fiktif).

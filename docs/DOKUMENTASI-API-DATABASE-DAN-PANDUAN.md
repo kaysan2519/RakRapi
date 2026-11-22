@@ -39,6 +39,11 @@ Database dijalankan pada **MySQL 8.4.11 (Aiven `TLSv1.3` — target runtime akti
 - **Aiven (Aktif di `backend/.env`):** 1 akun non-admin `rakrapi_app@%` (`REQUIRE SSL`, izin `SELECT, INSERT, UPDATE, DELETE ON rakrapi.*` + `EXECUTE ON PROCEDURE rakrapi.tambah_pegawai`, bukan `avnadmin`) dengan `DB_SSL=true` dan `DB_SSL_CA_BASE64`.
 - **Database proyek lain di Aiven (`defaultdb`, `money_tracker`):** 100% terisolasi dan tidak diubah.
 
+### D. Kondisi Data Operasional Aktif & Pemisahan Data Referensi vs Simulasi
+- **Ringkasan baris aktif di Aiven `rakrapi`:** 10 kategori (masing-masing memiliki 2 produk aktif), **20 produk** (3 produk & foto asli ID 2, 9, 13 dipertahankan utuh + 15 produk diperbarui non-destruktif via `PATCH` + 2 produk pelengkap kategori via `POST`), 3 lowongan kerja aktif, 3 program bansos berkuota, 4 pengumuman & informasi diskon (2 item terpin ke beranda pembeli), 1 baris `info_toko` (transfer bank dinonaktifkan karena rekening resmi belum tersedia), serta seluruh akun pengguna (`5` akun), riwayat pesanan (`1`), dan riwayat lamaran (`1`) tetap utuh.
+- **Data berbasis referensi nyata:** nama produk & merek yang beredar di pasar Indonesia, kisaran harga acuan pasar ritel Depok/Jabodetabek, serta 30 foto privat di Cloudinary (3 foto asli pengguna + foto produk/operasional berlisensi terbuka dari Open Food Facts, Wikimedia Commons, dan packshot resmi merek).
+- **Data berstatus simulasi proyek UMKM:** angka stok katalog, deskripsi & kuota 3 lowongan kerja, 3 program bantuan sosial (bukan program resmi pemerintah dan tanpa NIK/data pribadi warga), promo potongan kasir mingguan, serta alamat/kontak layanan kasir pada `info_toko`.
+
 ---
 
 ## 2. Dokumentasi REST API Lengkap (Base Path: `/api`)
