@@ -40,11 +40,13 @@ opsi `--admin`; server API tidak memakai kredensial admin.
 5. Setelah koneksi dan fitur teruji, file env lama tidak lagi diperlukan oleh
    perintah dalam repo. Jangan hapus sebelum nilai privatnya berhasil dipindahkan.
 
-Pada laptop ini, konfigurasi Laragon dan sandi demo sudah disatukan di `.env`
-pada 18 November 2026. Nilai koneksi, sandi, dan JWT yang sebelumnya bekerja
-dipertahankan; salinan privat konfigurasi lama masih disimpan di `private/`.
-Mode aktif tetap `laragon`. Kredensial Aiven belum lengkap, sehingga penyatuan
-file ini **belum berarti** Aiven sudah tersambung.
+Pada laptop ini, konfigurasi lokal sudah dirapikan menjadi **satu file aktif** `backend/.env`
+dan **satu template Git** `backend/.env.example` (22 November 2026). File lama `.env.aiven` dan
+`.env.demo` telah dipindahkan ke cadangan privat `private/arsip-env-20261122/` (diabaikan Git)
+tanpa mengubah nilai koneksi, sandi, maupun `JWT_SECRET`. Mode aktif lokal tetap `laragon`.
+Konfigurasi administratif Aiven tetap disimpan terpisah sementara di `private/aiven/admin.env`
+sampai migrasi Aiven selesai dan tidak dipakai oleh runtime API. Untuk production di Render,
+seluruh variabel diisi melalui Environment Variables pada dashboard Render (bukan mengunggah `.env`).
 
 [koneksi.ts](src/config/koneksi.ts) menyusun opsi untuk semua pool MySQL.
 Mode Aiven wajib memakai host layanan, kredensial, dan CA. `rejectUnauthorized`

@@ -30,13 +30,21 @@
 3. **Backup lokal:** Disetujui backup non-destruktif database Laragon dan foto asli ke `backend/private/` (diabaikan Git).
 4. **Aiven & Deployment:** Migrasi production ke Aiven, deployment final Render, dan deployment final Flutter Web Vercel **belum diizinkan** sebelum hasil inspeksi Aiven (`periksa-aiven.cjs`), uji live Cloudinary, dan persetujuan berikutnya.
 
-## 4. Kondisi Aiven & Status Permission (21 November 2026)
+## 4. Kondisi Aiven & Status Permission (TERVERIFIKASI LIVE — 22 November 2026 07:47)
 
-- **Jangkauan & TLS (`mysql-1067ea2a-mapiltugass.l.aivencloud.com:17374`):** Terjangkau (`MySQL 8.4.11`), handshake `TLSv1.3` terhadap `backend/private/aiven/ca.pem` lulus (`tls_verified: true`).
-- **Login & Permission Aiven:** **BELUM DAPAT DIVERIFIKASI** karena `DB_PASSWORD` di `backend/private/aiven/admin.env` dan `ADMIN_DB_PASSWORD` di `backend/.env` masih kosong.
-- **Tindakan yang dibutuhkan pengembang (privat, jangan kirim ke chat):**
-  1. Cek status layanan *Running* & sisa kredit trial paket Developer-1 di `https://console.aiven.io`.
-  2. Isi `DB_PASSWORD=` di `C:\Users\Kaysan\UjiLevel\backend\private\aiven\admin.env` (tidak mengubah `.env` Laragon).
+- **Login & TLS (`periksa-aiven.cjs` & `audit_aiven_readonly.cjs`):** **LULUS 100%**
+  - Host & Port: `mysql-1067ea2a-mapiltugass.l.aivencloud.com:17374`
+  - Akun admin aktif: `avnadmin@%` · Versi MySQL: **`8.4.11`**
+  - TLS: `tls_terenkripsi: true`, `tls_terverifikasi: true`, protokol **`TLSv1.3`**, sidik sertifikat `83:1C:7F:A5:99:BF:C2:7D:F0:19:A5:7A:5F:4C:EB:B4:F1:E8:CC:DC:3E:DA:31:F0:8D:4D:71:AB:B5:59:7F:40`
+- **Database existing pada layanan Aiven (TIDAK BOLEH DISENTUH):**
+  - `defaultdb`: `notes`, `schema_migrations`, `users`
+  - `money_tracker`: `categories`, `transactions`
+  - **Database `rakrapi` belum ada** (`nama_database_drizzle: null`) — aman dibuat terpisah tanpa benturan dengan proyek lain.
+- **Permission & Variabel Server Aiven (100% kompatibel dengan RakRapi):**
+  - `avnadmin@%` memiliki `CREATE`, `CREATE ROUTINE`, `ALTER ROUTINE`, `EXECUTE`, `CREATE USER`, dan `WITH GRANT OPTION` (mendukung stored procedure `tambah_pegawai` dan pembuatan 4 akun aplikasi terpisah tanpa memakai admin sebagai akun API!).
+  - `log_bin_trust_function_creators = ON`, `sql_require_primary_key = ON` (semua 6 tabel RakRapi ber-PK), `character_set_server = utf8mb4`, `collation_server = utf8mb4_0900_ai_ci`, `lower_case_table_names = 0` (semua nama tabel RakRapi huruf kecil), `sql_mode` memakai `ANSI_QUOTES` (semua SQL RakRapi memakai tanda petik tunggal).
+- **Kredensial privat:** Password `avnadmin` tersimpan aman di `backend/private/aiven/admin.env` (diabaikan Git), clipboard sudah dikosongkan (`CLIPBOARD_CLEARED=True`). Status sisa kredit trial Developer-1 tetap perlu dikonfirmasi dari Billing Aiven Console.
+- **Status Cloudinary:** Menunggu salinan `CLOUDINARY_URL` via clipboard untuk mengisi `backend/.env` baris 27–29 dan menjalankan 11 pengujian live Cloudinary.
 
 ## 5. Status Backup Lokal Non-Destruktif (Terverifikasi 21 November 2026)
 
@@ -56,20 +64,18 @@
 | Katalog HTTP | `node --env-file=.env --test test/katalog.cjs` | 5/5 lulus (CRUD kategori/barang, JOIN, 409 RESTRICT, upload foto, restart) | **LULUS** |
 | Integritas Data Asli | Read-only `SELECT` MySQL `rakrapi` + SHA-256 | `barang` ID 2 (`Minyak goreng 1 L`, Rp19.000, stok `12.000` botol), `kategori` ID 2, `users` (`pemilik:1, pegawai:1, warga:2`), foto SHA-256 identik | **UTUH** |
 
-## 7. File yang Berubah pada Tahap Ini
+## 7. Struktur Environment Terbaru & File yang Berubah (22 November 2026)
 
-- `backend/package.json` & `backend/package-lock.json` — menambah hanya `cloudinary` (`^2.11.0`, 0 kerentanan).
-- `backend/src/validations/foto.validation.ts` — mempertahankan `System.Drawing` di Windows + menambah validasi struktur/dimensi PNG (`IHDR` + dekompresi `IDAT` via `node:zlib`) & JPEG (`SOF`/`SOS`) ≤ 16 MP lintas OS; menolak Linux tanpa Cloudinary (`503`).
-- `backend/src/services/foto.service.ts` — mendukung penyimpanan privat `authenticated` Cloudinary (upload stream, verifikasi format/dimensi, private download URL 60 detik server-side, pembersihan aset yatim aman) sambil mempertahankan mode lokal untuk development & runner uji.
-- `backend/.env.example` — menambah template variabel `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`.
-- `backend/.env` *(lokal, diabaikan Git)* — menambahkan 3 baris kosong `CLOUDINARY_*` siap diisi privat.
-- `backend/test/foto.cjs` — pengujian otomatis seluruh skenario validasi lintas OS & integrasi Cloudinary.
-- `HANDOVER_LOG.md` — diperbarui.
+- **Struktur aktif di `backend/` (disederhanakan menjadi 1 file aktif + 1 template):**
+  - `backend/.env` *(diabaikan Git)* — satu-satunya file konfigurasi aktif lokal (24 variabel terstruktur: Laragon/Aiven `DB_MODE`, `HOST`, `PORT`, `CORS_ORIGIN`, 4 akun DB terpisah, `JWT_SECRET` tidak berubah, placeholder `CLOUDINARY_*`, sandi uji demo).
+  - `backend/.env.example` *(tracked Git)* — template tanpa credential + catatan deployment Render Dashboard.
+  - `backend/private/aiven/admin.env` *(diabaikan Git, terpisah sementara)* — kredensial admin Aiven khusus inspeksi & migrasi Tahap 4 (tidak dipakai runtime API).
+  - `backend/private/arsip-env-20261122/` *(diabaikan Git)* — arsip aman file lama `.env.aiven`, `.env.demo`, dan `.env.sebelum-rapikan`.
+- **Production di Render:** Menggunakan *Environment Variables* pada Dashboard Render + *Secret File* `/etc/secrets/ca.pem` (tidak mengunggah `.env`).
+- **File tracked yang berubah pada perapian env:** `backend/.env.example`, `backend/README.md`, `HANDOVER_LOG.md`. **0 perubahan source code.**
 
 ## 8. Langkah Berikutnya
 
-1. Pengembang mengisi kredensial secara privat (jangan dikirim ke chat):
-   - Aiven `avnadmin`: `DB_PASSWORD=` di `backend/private/aiven/admin.env` (plus cek kredit trial di Aiven Console).
-   - Cloudinary Free: `CLOUDINARY_CLOUD_NAME=`, `CLOUDINARY_API_KEY=`, `CLOUDINARY_API_SECRET=` di `backend/.env`.
-2. Jalankan verifikasi live baca-saja Aiven (`periksa-aiven.cjs` + audit hak `GRANT`/`CREATE ROUTINE`) dan pengujian live Cloudinary pada folder uji terisolasi (termasuk uji nyata file PNG/JPEG valid & korup terhadap server Cloudinary).
-3. Setelah hasil verifikasi Aiven & live Cloudinary disetujui, lanjut Tahap 4 (migrasi database Aiven) dan Tahap 5 (deploy backend Render Free).
+1. Salin `CLOUDINARY_URL` di Cloudinary Console (1 klik Copy, ketik manual **`ok cloudinary`**) untuk mengisi baris `CLOUDINARY_*` di `backend/.env` secara aman dan menjalankan 11 pengujian live Cloudinary.
+2. Setelah uji live Cloudinary lulus dan disetujui, minta persetujuan Tahap 4 (migrasi database Aiven — membuat database `rakrapi` terpisah, 6 tabel + FK + stored procedure `tambah_pegawai`, 4 akun aplikasi `REQUIRE SSL`, migrasi data asli + unggah foto asli ID 2 ke Cloudinary).
+3. Lanjut Tahap 5 (deploy backend Render Free via Dashboard Env Vars + Secret File `ca.pem`), Tahap 6 (build APK All-Devices), dan Tahap 7 (Flutter Web + Vercel setelah konfirmasi guru).
